@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>两位数心算 — 双人对战（Firebase 实时）</title>
+  <title>两位数心算 — 双人对战（本地服务器）</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700&display=swap" rel="stylesheet">
@@ -32,8 +32,8 @@
         </div>
       </div>
       <div style="text-align:right">
-        <div class="small">双人实时对战 — 使用 Firebase Firestore</div>
-        <div class="small" id="firebaseStatus">检查Firebase连接中...</div>
+        <div class="small">双人实时对战 — 使用本地Python服务器</div>
+        <div class="small" id="serverStatus">检查服务器连接中...</div>
       </div>
     </header>
 
@@ -137,59 +137,217 @@
     </div>
   </div>
 
-  <!-- Firebase (modular SDK) - 请在以下脚本段内粘贴你的 firebaseConfig 对象 -->
+  <!-- 本地WebSocket服务器连接 -->
   <script type="module">
-    // === IMPORTANT ===
-    // 1) 请先在 Firebase 控制台创建项目并启用 Firestore（默认规则在开发时可设置为公开读写，生产请设置规则）。
-    // 2) 将你的 firebaseConfig 填入下面的 CONFIG 变量中。
-    // 3) 若希望更准确的在线状态，可额外使用 Realtime Database 的 onDisconnect。
+    // 本地WebSocket服务器替代Firebase
+    // 服务器运行在 ws://localhost:8765
 
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-    import {
-      getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, updateDoc, serverTimestamp, arrayUnion, writeBatch, getDocs
-    } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-    // --- 在这里填入你的 Firebase 配置 ---
-    const CONFIG = {
-      apiKey: "AIzaSyCGNmmbKhZl2Gpri7P0EeFyg9Ftfrf3xYI",
-      authDomain: "match-f5c8b.firebaseapp.com",
-      projectId: "match-f5c8b",
-      storageBucket: "atch-f5c8b.firebasestorage.app",
-      messagingSenderId: "541651934459",
-      appId: "1:541651934459:web:fe3cc7f710910e34f7a45e",
-      measurementId: "G-M15HSBBHR5"
-    };
-    // ======================================
-
-    // initialize with error handling
-    let app, db;
-    try {
-      app = initializeApp(CONFIG);
-      db = getFirestore(app);
-      console.log('Firebase initialized successfully');
-      
-      // Test Firebase connection
-      const testDoc = doc(db, 'test', 'connection');
-      setDoc(testDoc, { test: true, timestamp: Date.now() })
-        .then(() => {
-          console.log('Firebase connection test successful');
-          document.getElementById('firebaseStatus').textContent = '✅ Firebase连接正常';
-          document.getElementById('firebaseStatus').style.color = '#22c55e';
-        })
-        .catch(error => {
-          console.error('Firebase connection test failed:', error);
-          document.getElementById('firebaseStatus').textContent = '❌ Firebase连接失败: ' + error.message;
-          document.getElementById('firebaseStatus').style.color = '#ef4444';
-        });
-    } catch (error) {
-      console.error('Firebase initialization error:', error);
-      document.getElementById('firebaseStatus').textContent = '❌ Firebase初始化失败: ' + error.message;
-      document.getElementById('firebaseStatus').style.color = '#ef4444';
-      alert('Firebase初始化失败，请检查配置信息: ' + error.message);
-    }
-
-    // --- 简单 UUID ---
+    // --- WebSocket 连接管理 ---
+    let ws = null;
+    let reconnectTimer = null;
+    let heartbeatTimer = null;
+    
+    // 简单 UUID
     function uuid(len=8){return Math.random().toString(36).slice(2,2+len)}
+    
+    // 连接WebSocket服务器
+    function connectWebSocket() {
+      const wsUrl = 'ws://localhost:8765';
+      
+      try {
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+          console.log('WebSocket连接成功');
+          document.getElementById('serverStatus').textContent = '✅ 服务器连接正常';
+          document.getElementById('serverStatus').style.color = '#22c55e';
+          
+          // 注册玩家
+          ws.send(JSON.stringify({
+            type: 'register',
+            player_id: playerId
+          }));
+          
+          // 开始心跳
+          startHeartbeat();
+          
+          // 如果有房间ID，重新加入
+          if (roomId && roomId !== 'local') {
+            ws.send(JSON.stringify({
+              type: 'join_room',
+              room_id: roomId
+            }));
+          }
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            handleServerMessage(data);
+          } catch (error) {
+            console.error('解析服务器消息失败:', error);
+          }
+        };
+        
+        ws.onclose = () => {
+          console.log('WebSocket连接关闭');
+          document.getElementById('serverStatus').textContent = '❌ 服务器连接断开';
+          document.getElementById('serverStatus').style.color = '#ef4444';
+          
+          // 停止心跳
+          stopHeartbeat();
+          
+          // 自动重连
+          scheduleReconnect();
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket错误:', error);
+          document.getElementById('serverStatus').textContent = '❌ 服务器连接错误';
+          document.getElementById('serverStatus').style.color = '#ef4444';
+        };
+        
+      } catch (error) {
+        console.error('WebSocket连接失败:', error);
+        document.getElementById('serverStatus').textContent = '❌ 服务器连接失败: ' + error.message;
+        document.getElementById('serverStatus').style.color = '#ef4444';
+      }
+    }
+    
+    // 处理服务器消息
+    function handleServerMessage(data) {
+      switch (data.type) {
+        case 'registered':
+          console.log('注册成功:', data.player_id);
+          break;
+          
+        case 'room_created':
+          roomId = data.room_id;
+          setRoomIdText(roomId);
+          const shareUrl = location.href.split('#')[0] + '#room=' + roomId;
+          alert(`房间已创建\n分享链接给对手：\n${shareUrl}`);
+          break;
+          
+        case 'join_result':
+          if (data.success) {
+            roomId = data.room_id;
+            setRoomIdText(roomId);
+            console.log('成功加入房间:', roomId);
+          } else {
+            alert('加入房间失败，请检查房间ID');
+          }
+          break;
+          
+        case 'start_result':
+          if (data.success) {
+            console.log('游戏开始成功');
+          } else {
+            alert('开始游戏失败，请确保有足够的玩家');
+          }
+          break;
+          
+        case 'restart_result':
+          if (data.success) {
+            console.log('游戏重置成功');
+            endModal.style.display = 'none';
+            problemText.textContent = '等待匹配中…';
+            startBtn.disabled = true;
+            startBtn.textContent = '等待其他用户上线';
+          }
+          break;
+          
+        case 'room_update':
+          handleRoomUpdate(data);
+          break;
+      }
+    }
+    
+    // 处理房间更新
+    function handleRoomUpdate(data) {
+      const room = data.room;
+      const players = data.players;
+      
+      // 更新题目列表
+      if (room.problems && room.problems.length > 0) {
+        problems = room.problems;
+      }
+      
+      // 处理游戏状态变化
+      if (room.state === 'running' && room.start_ts && !running) {
+        startTs = room.start_ts * 1000; // 转换为毫秒
+        beginLocalRun();
+      }
+      
+      if (room.state === 'finished') {
+        showResults(players);
+      }
+      
+      // 更新玩家列表
+      renderPlayers(players);
+      
+      // 更新开始按钮状态
+      const onlineCount = players.filter(p => p.online).length;
+      console.log('房间状态更新:', {
+        roomState: room.state,
+        onlineCount,
+        singlePlayerMode,
+        running,
+        players: players.map(p => ({ name: p.name, online: p.online }))
+      });
+      
+      if (!singlePlayerMode) {
+        if (onlineCount >= 2) {
+          startBtn.disabled = false;
+          startBtn.textContent = '开始游戏';
+          if (running) {
+            enableAnswerInputs(true);
+          }
+        } else {
+          startBtn.disabled = true;
+          startBtn.textContent = `等待其他用户上线 (${onlineCount}/2)`;
+          enableAnswerInputs(false);
+        }
+      }
+    }
+    
+    // 发送消息到服务器
+    function sendToServer(message) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+      } else {
+        console.warn('WebSocket未连接，无法发送消息:', message);
+      }
+    }
+    
+    // 心跳
+    function startHeartbeat() {
+      stopHeartbeat();
+      heartbeatTimer = setInterval(() => {
+        sendToServer({ type: 'heartbeat' });
+      }, 4000);
+    }
+    
+    function stopHeartbeat() {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    }
+    
+    // 自动重连
+    function scheduleReconnect() {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      
+      reconnectTimer = setTimeout(() => {
+        console.log('尝试重新连接服务器...');
+        connectWebSocket();
+      }, 3000);
+    }
+    
+    // 初始化连接
+    connectWebSocket();
 
     // UI refs
     const roomIdEl = document.getElementById('roomId');
@@ -263,7 +421,6 @@
     let playerName = 'P' + playerId;
     let roomRef = null;
     let unsubscribeRoom = null;
-    let heartbeatTimer = null;
     let currentProblemIndex = 0;
     let problems = [];
     let myCorrect = 0, myWrong = 0, myAttempted = 0;
@@ -272,80 +429,45 @@
     let localTimer = null;
     let singlePlayerMode = false;
 
-    // helper firestore refs
-    function roomDocRef(id){ return doc(db, 'games', id); }
-    function playerDocRef(roomId, pid){ return doc(db, 'games', roomId, 'players', pid); }
+    // WebSocket服务器不需要数据库引用
 
     // UI helpers
     function setRoomIdText(id){ roomIdEl.textContent = id; }
     function setPlayerIdText(){ playerIdEl.textContent = playerId; }
 
     // create room
-    createRoomBtn.addEventListener('click', async ()=>{
-      if (!navigator.onLine) {
-        alert('网络连接不可用，请检查网络设置');
+    createRoomBtn.addEventListener('click', ()=>{
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert('服务器连接不可用，请检查服务器是否运行');
         return;
       }
-      try{
-        roomId = uuid(6);
-        roomRef = roomDocRef(roomId);
-        await setDoc(roomRef, { state: 'waiting', createdAt: serverTimestamp(), duration: DURATION, problemCount: problemCount });
-        await setDoc(playerDocRef(roomId, playerId), { id: playerId, name: playerName, lastSeen: Date.now(), correct:0, wrong:0, attempted:0 });
-        onRoomChange(roomId);
-        const shareUrl = location.href.split('#')[0] + '#room=' + roomId;
-        alert(`房间已创建
-分享链接给对手：
-${shareUrl}`);
-      }catch(err){ 
-        console.error('create room err', err); 
-        let errorMsg = '创建房间失败';
-        if (err.code === 'unavailable') {
-          errorMsg += '：网络连接不可用';
-        } else if (err.code === 'permission-denied') {
-          errorMsg += '：权限不足，请检查Firebase安全规则';
-        } else {
-          errorMsg += '：' + (err.message || '未知错误');
-        }
-        alert(errorMsg); 
-      }
+      sendToServer({ type: 'create_room' });
     });
 
     // join room (via prompt or URL)
-    joinRoomBtn.addEventListener('click', async ()=>{
-      if (!navigator.onLine) {
-        alert('网络连接不可用，请检查网络设置');
+    joinRoomBtn.addEventListener('click', ()=>{
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert('服务器连接不可用，请检查服务器是否运行');
         return;
       }
-      try{
-        const id = prompt('输入房间 ID 或粘贴链接：'); if(!id) return;
-        const match = id.match(/room=([a-z0-9]+)/i);
-        roomId = match? match[1] : id.trim();
-        roomRef = roomDocRef(roomId);
-        const snap = await getDoc(roomRef);
-        if(!snap.exists()){ alert('未找到房间：' + roomId); roomId = null; return; }
-        await setDoc(playerDocRef(roomId, playerId), { id: playerId, name: playerName, lastSeen: Date.now(), correct:0, wrong:0, attempted:0 }, { merge: true });
-        onRoomChange(roomId);
-      }catch(err){ 
-        console.error('join err', err); 
-        let errorMsg = '加入房间失败';
-        if (err.code === 'unavailable') {
-          errorMsg += '：网络连接不可用';
-        } else if (err.code === 'permission-denied') {
-          errorMsg += '：权限不足，请检查Firebase安全规则';
-        } else {
-          errorMsg += '：' + (err.message || '未知错误');
-        }
-        alert(errorMsg); 
-      }
+      const id = prompt('输入房间 ID 或粘贴链接：'); 
+      if(!id) return;
+      const match = id.match(/room=([a-z0-9]+)/i);
+      const roomIdToJoin = match? match[1] : id.trim();
+      sendToServer({ 
+        type: 'join_room',
+        room_id: roomIdToJoin
+      });
     });
 
     // auto-join if URL contains room
-    (async ()=>{
-      try{
-        const h = location.hash;
-        const m = h.match(/room=([a-z0-9]+)/i);
-        if(m){ roomId = m[1]; const docSnap = await getDoc(roomDocRef(roomId)); if(docSnap.exists()){ await setDoc(playerDocRef(roomId, playerId), { id: playerId, name: playerName, lastSeen: Date.now(), correct:0, wrong:0, attempted:0 }, { merge: true }); onRoomChange(roomId); } }
-      }catch(e){ console.log('auto join err', e); }
+    (()=>{
+      const h = location.hash;
+      const m = h.match(/room=([a-z0-9]+)/i);
+      if(m){ 
+        roomId = m[1]; 
+        // 连接成功后会自动加入房间
+      }
     })();
 
     function renderPlayers(list){
@@ -368,72 +490,17 @@ ${shareUrl}`);
       });
     }
 
-    // watch room changes
-    async function onRoomChange(id){
-      // 如果是单人模式，不设置房间监听
-      if (singlePlayerMode) return;
-      
-      setRoomIdText(id); setPlayerIdText(); roomRef = roomDocRef(id);
-      if(unsubscribeRoom) unsubscribeRoom();
-      unsubscribeRoom = onSnapshot(roomRef, snap=>{
-        if(!snap.exists()) return;
-        const data = snap.data();
-        const state = data.state;
-        console.log('Room state changed:', state, 'running:', running);
-        if(data.problems && data.problems.length) problems = data.problems;
-        if(state === 'running' && data.startTs){
-          startTs = data.startTs.toMillis ? data.startTs.toMillis() : (data.startTs);
-          if(!running) beginLocalRun();
-        }
-        if(state === 'finished'){ showResults(); }
-      });
-
-      const playersCol = collection(db, 'games', id, 'players');
-      const unsubPlayers = onSnapshot(playersCol, snap=>{
-        const list = [];
-        snap.forEach(d=>{ const dd = d.data(); const online = (Date.now() - (dd.lastSeen||0)) < 12000; list.push({...dd, online}); });
-        renderPlayers(list);
-        const onlineCount = list.filter(p=>p.online).length;
-        // 只有在非单人模式才处理多人游戏逻辑
-        if (!singlePlayerMode) {
-          if(onlineCount >= 2){ 
-            startBtn.disabled = false; 
-            startBtn.textContent = '开始游戏'; 
-            // 只有在游戏运行中才启用输入框
-            if (running) {
-              enableAnswerInputs(true);
-            }
-          }
-          else { 
-            startBtn.disabled = true; 
-            startBtn.textContent = '等待其他用户上线'; 
-            enableAnswerInputs(false); 
-          }
-        }
-      });
-
-      if(heartbeatTimer) clearInterval(heartbeatTimer);
-      heartbeatTimer = setInterval(()=>{
-        setDoc(playerDocRef(id, playerId), { id: playerId, name: playerName, lastSeen: Date.now() }, { merge: true }).catch(()=>{});
-      },4000);
-
-      window.addEventListener('beforeunload', ()=>{
-        try{ setDoc(playerDocRef(id, playerId), { lastSeen: 0 }, { merge: true }); }catch(e){}
-      });
-    }
+    // WebSocket不需要房间监听函数，由handleRoomUpdate处理
 
     // start game (any player can request start if >=2 online)
-    startBtn.addEventListener('click', async ()=>{
-      if(!roomRef) return alert('未加入房间');
-      try{
-        const pool = generateProblems(problemCount);
-        await setDoc(roomRef, { state: 'running', startTs: serverTimestamp(), problems: pool, duration: DURATION }, { merge: true });
-        // reset each player's counters to zero (best-effort)
-        const snaps = await getDocs(collection(db, 'games', roomId, 'players'));
-        for(const d of snaps.docs){
-          try{ await setDoc(playerDocRef(roomId, d.id), { correct:0, wrong:0, attempted:0, lastSeen: Date.now() }, { merge: true }); }catch(e){}
-        }
-      }catch(err){ console.error('start err', err); alert('开始失败：'+err.message); }
+    startBtn.addEventListener('click', ()=>{
+      console.log('开始游戏按钮被点击');
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert('服务器连接不可用，请检查服务器是否运行');
+        return;
+      }
+      console.log('发送开始游戏请求到服务器');
+      sendToServer({ type: 'start_game' });
     });
 
     // generate problems list
@@ -442,13 +509,21 @@ ${shareUrl}`);
 
     // begin local run after room indicates running
     async function beginLocalRun(){
-      if(!roomRef) return;
-      const snap = await getDoc(roomRef);
-      const data = snap.data();
-      problems = data.problems || generateProblems(problemCount);
-      currentProblemIndex = 0; myCorrect = 0; myWrong = 0; myAttempted = 0; updateMyStats(); running = true;
-      startTs = data.startTs && data.startTs.toMillis ? data.startTs.toMillis() : Date.now();
-      enableAnswerInputs(true); answerInput.focus();
+      console.log('开始本地游戏运行');
+      // 题目已经在handleRoomUpdate中更新了
+      if(problems.length === 0) {
+        problems = generateProblems(problemCount);
+      }
+      currentProblemIndex = 0; 
+      myCorrect = 0; 
+      myWrong = 0; 
+      myAttempted = 0; 
+      updateMyStats(); 
+      running = true;
+      startTs = startTs || Date.now(); // 使用从服务器获取的时间戳
+      console.log('游戏开始，题目数量:', problems.length);
+      enableAnswerInputs(true); 
+      answerInput.focus();
       if(localTimer) clearInterval(localTimer);
       localTimer = setInterval(()=>{
         const elapsed = Math.floor((Date.now() - startTs)/1000);
@@ -456,7 +531,10 @@ ${shareUrl}`);
         timeText.textContent = remaining + 's';
         const pct = Math.max(0, (remaining/DURATION)*100);
         timerBar.style.width = pct + '%';
-        if(remaining <= 0){ clearInterval(localTimer); finishRun(); }
+        if(remaining <= 0){ 
+          clearInterval(localTimer); 
+          finishRun(); 
+        }
       },200);
       showProblem();
     }
@@ -493,7 +571,17 @@ ${shareUrl}`);
       myAttempted++; const p = problems[currentProblemIndex];
       if(num === p.answer){ myCorrect++; playChime(); spawnConfetti(); }
       else { myWrong++; playBuzzer(); }
-      try{ await setDoc(playerDocRef(roomId, playerId), { id: playerId, name: playerName, lastSeen: Date.now(), correct: myCorrect, wrong: myWrong, attempted: myAttempted }, { merge: true }); }catch(e){ console.warn('write player stat err', e); }
+      
+      // 发送统计数据到服务器
+      if (!singlePlayerMode && ws && ws.readyState === WebSocket.OPEN) {
+        sendToServer({
+          type: 'update_stats',
+          correct: myCorrect,
+          wrong: myWrong,
+          attempted: myAttempted
+        });
+      }
+      
       updateMyStats(); currentProblemIndex++; showProblem(); answerInput.value=''; answerInput.focus();
     }
 
@@ -502,29 +590,37 @@ ${shareUrl}`);
     // finish run: set room state finished and display results
     async function finishRun(){
       running = false; enableAnswerInputs(false);
-      try{
-        await setDoc(playerDocRef(roomId, playerId), { id: playerId, name: playerName, lastSeen: Date.now(), correct: myCorrect, wrong: myWrong, attempted: myAttempted }, { merge: true });
-        await updateDoc(roomRef, { state: 'finished', finishedAt: serverTimestamp() });
-      }catch(e){ console.warn('finish write err', e); }
+      
+      // 发送最终统计数据到服务器
+      if (!singlePlayerMode && ws && ws.readyState === WebSocket.OPEN) {
+        sendToServer({
+          type: 'update_stats',
+          correct: myCorrect,
+          wrong: myWrong,
+          attempted: myAttempted
+        });
+      }
     }
 
-    // show results by reading players
-    async function showResults(){
-      try{
-        const snaps = await getDocs(collection(db, 'games', roomId, 'players'));
-        const list = snaps.docs.map(d=>d.data());
+    // show results by reading players (从handleRoomUpdate获取数据)
+    function showResults(players = null){
+      if (players) {
         resultsBox.innerHTML = '';
-        list.forEach(p=>{
+        players.forEach(p=>{
           const acc = p.attempted? Math.round((p.correct/p.attempted)*100) : 0;
           const div = document.createElement('div'); div.style.padding='8px 0'; div.innerHTML = `<strong>${p.name}</strong> — 答对 ${p.correct||0}，错误 ${p.wrong||0}，正确率 ${acc}%`;
           resultsBox.appendChild(div);
         });
-        usedTime.textContent = DURATION + 's'; endModal.style.display = 'flex';
-      }catch(e){ console.error('show results err', e); }
+      }
+      usedTime.textContent = DURATION + 's'; endModal.style.display = 'flex';
     }
 
-    restartBtn.addEventListener('click', async ()=>{
-      if(!roomRef) return; try{ await setDoc(roomRef, { state: 'waiting', problems: [], startTs: null, finishedAt: null }, { merge: true }); endModal.style.display = 'none'; problemText.textContent = '等待匹配中…'; startBtn.disabled = true; startBtn.textContent = '等待其他用户上线'; }catch(e){ console.warn(e); }
+    restartBtn.addEventListener('click', ()=>{
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert('服务器连接不可用，请检查服务器是否运行');
+        return;
+      }
+      sendToServer({ type: 'restart_game' });
     });
     closeModal.addEventListener('click', ()=>{ endModal.style.display = 'none'; });
 
@@ -609,53 +705,20 @@ ${shareUrl}`);
       endModal.style.display = 'flex';
     }
 
-    // network status monitoring
-    function updateNetworkStatus() {
-      const statusIndicator = document.createElement('div');
-      statusIndicator.id = 'networkStatus';
-      statusIndicator.style.position = 'fixed';
-      statusIndicator.style.top = '10px';
-      statusIndicator.style.right = '10px';
-      statusIndicator.style.padding = '8px 12px';
-      statusIndicator.style.borderRadius = '6px';
-      statusIndicator.style.fontSize = '12px';
-      statusIndicator.style.fontWeight = '600';
-      statusIndicator.style.zIndex = '1000';
-      statusIndicator.style.transition = 'all 0.3s ease';
-      
-      if (!document.getElementById('networkStatus')) {
-        document.body.appendChild(statusIndicator);
-      }
-      
-      if (navigator.onLine) {
-        statusIndicator.textContent = '🟢 在线';
-        statusIndicator.style.background = 'rgba(34, 197, 94, 0.2)';
-        statusIndicator.style.color = '#22c55e';
-        statusIndicator.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+    // 服务器连接状态显示
+    function updateServerStatus() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        document.getElementById('serverStatus').textContent = '✅ 服务器连接正常';
+        document.getElementById('serverStatus').style.color = '#22c55e';
       } else {
-        statusIndicator.textContent = '🔴 离线';
-        statusIndicator.style.background = 'rgba(239, 68, 68, 0.2)';
-        statusIndicator.style.color = '#ef4444';
-        statusIndicator.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        document.getElementById('serverStatus').textContent = '❌ 服务器连接断开';
+        document.getElementById('serverStatus').style.color = '#ef4444';
       }
     }
 
-    window.addEventListener('online', () => {
-      updateNetworkStatus();
-      console.log('网络连接已恢复');
-    });
-
-    window.addEventListener('offline', () => {
-      updateNetworkStatus();
-      console.log('网络连接已断开');
-      if (running) {
-        alert('网络连接已断开，游戏可能无法正常进行');
-      }
-    });
-
     // initial UI state
     setPlayerIdText(); setRoomIdText('-'); timeText.textContent = DURATION + 's'; timerBar.style.width = '100%';
-    updateNetworkStatus();
+    updateServerStatus();
 
   </script>
 </body>
