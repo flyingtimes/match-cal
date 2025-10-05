@@ -16,7 +16,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # 游戏常量
@@ -127,8 +127,20 @@ class GameServer:
         self.rooms[room_id] = room
         self.room_players[room_id] = {}
         
-        # 将创建者加入房间
-        await self.join_room(player_id, room_id)
+        # 将创建者加入房间（不立即广播，等房间创建完成后再广播）
+        if room_id not in self.room_players:
+            self.room_players[room_id] = {}
+        
+        player = Player(
+            id=player_id,
+            name=self.generate_player_name(player_id),
+            last_seen=time.time()
+        )
+        
+        self.room_players[room_id][player_id] = player
+        self.player_rooms[player_id] = room_id
+        
+        logger.info(f"玩家 {player_id} 加入房间 {room_id}")
         return room_id
 
     async def join_room(self, player_id, room_id):
@@ -237,6 +249,20 @@ class GameServer:
             player.last_seen = time.time()
             await self.broadcast_room_update(room_id)
 
+    async def update_player_name(self, player_id, new_name):
+        """更新玩家名称"""
+        room_id = self.player_rooms.get(player_id)
+        if room_id and room_id in self.room_players and player_id in self.room_players[room_id]:
+            old_name = self.room_players[room_id][player_id].name
+            self.room_players[room_id][player_id].name = new_name
+            self.room_players[room_id][player_id].last_seen = time.time()
+            logger.info(f"玩家 {player_id} 更改名称: {old_name} -> {new_name}")
+            logger.info(f"开始广播房间 {room_id} 的名称更新")
+            await self.broadcast_room_update(room_id)
+            logger.info(f"房间 {room_id} 名称更新广播完成")
+        else:
+            logger.warning(f"无法更新玩家 {player_id} 的名称: 房间不存在或玩家不在房间中")
+
     async def restart_game(self, player_id):
         """重新开始游戏"""
         room_id = self.player_rooms.get(player_id)
@@ -311,22 +337,28 @@ class GameServer:
 
     async def handle_message(self, websocket, message_data):
         """处理客户端消息"""
+        print(f"收到消息: {message_data}")  # 临时调试
         player_id = self.ws_to_player.get(websocket)
         if not player_id:
+            logger.warning(f"收到未注册客户端的消息: {message_data}")
             return
         
         try:
             message = json.loads(message_data)
             msg_type = message.get('type')
+            print(f"玩家 {player_id} 发送消息: {msg_type}")  # 临时调试
+            logger.debug(f"收到玩家 {player_id} 的消息类型: {msg_type}")
+            logger.debug(f"消息内容: {message}")
             
             if msg_type == 'create_room':
                 room_id = await self.create_room(player_id)
-                # 确保房间创建完成后再发送响应
-                await asyncio.sleep(0.1)
+                # 先发送房间创建响应
                 await websocket.send(json.dumps({
                     'type': 'room_created',
                     'room_id': room_id
                 }))
+                # 然后立即广播房间更新
+                await self.broadcast_room_update(room_id)
             
             elif msg_type == 'join_room':
                 room_id = message.get('room_id')
@@ -350,6 +382,15 @@ class GameServer:
                 attempted = message.get('attempted', 0)
                 await self.update_player_stats(player_id, correct, wrong, attempted)
             
+            elif msg_type == 'update_player_name':
+                logger.info(f"收到玩家 {player_id} 的名称更新请求")
+                new_name = message.get('name', '').strip()
+                logger.info(f"新名称: '{new_name}' (长度: {len(new_name)})")
+                if new_name and len(new_name) <= 12:
+                    await self.update_player_name(player_id, new_name)
+                else:
+                    logger.warning(f"无效的用户名称: '{new_name}' (长度: {len(new_name)})")
+            
             elif msg_type == 'restart_game':
                 success = await self.restart_game(player_id)
                 await websocket.send(json.dumps({
@@ -368,9 +409,11 @@ class GameServer:
     async def handle_client(self, websocket, path):
         """处理客户端连接"""
         player_id = None
+        print(f"新客户端连接: {path}")  # 临时调试
         try:
             # 等待客户端发送player_id
             message = await websocket.recv()
+            print(f"收到注册消息: {message}")  # 临时调试
             data = json.loads(message)
             if data.get('type') == 'register':
                 player_id = data.get('player_id')
@@ -392,7 +435,9 @@ class GameServer:
                     await self.join_room(player_id, room_id)
             
             # 持续处理消息
+            print(f"开始监听玩家 {player_id} 的消息")  # 临时调试
             async for message in websocket:
+                print(f"收到玩家 {player_id} 的原始消息: {message}")  # 临时调试
                 await self.handle_message(websocket, message)
                 
         except websockets.exceptions.ConnectionClosed:

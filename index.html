@@ -15,8 +15,20 @@
     .side-stats{display:flex;flex-direction:column;gap:12px}.timer{height:18px;background:rgba(255,255,255,0.04);border-radius:10px;overflow:hidden}.timer > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:100%;transform-origin:left}.stat-row{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005))}.stat{font-size:18px;font-weight:700}.small{font-size:12px;color:rgba(230,240,255,0.7)}.controls{display:flex;gap:8px;margin-top:8px}
     #confettiCanvas{position:absolute;inset:0;pointer-events:none;z-index:3}
     .modal{position:fixed;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(2,6,23,0.6), rgba(2,6,23,0.6));z-index:10}.modal-card{width:min(560px,92vw);padding:20px;border-radius:14px;background:linear-gradient(180deg,#062031, #021124);box-shadow:0 18px 60px rgba(2,6,23,0.7);text-align:center}.big-num{font-size:48px;font-weight:800}.restart{margin-top:14px}
-    @media (max-width:860px){.game-grid{grid-template-columns:1fr} .side-stats{flex-direction:row;gap:8px;justify-content:space-between}}
+    @media (max-width:860px){
+      .game-grid{grid-template-columns:1fr} 
+      .side-stats{flex-direction:row;gap:8px;justify-content:space-between}
+      .small{font-size:11px}
+    }
+    @media (max-width:640px){
+      .game-grid{grid-template-columns:1fr}
+      .side-stats{flex-direction:column;gap:6px}
+      .problem{font-size:42px}
+      .answer{font-size:24px;width:140px}
+      .small{font-size:10px}
+    }
     .shake{animation:shake 420ms cubic-bezier(.36,.07,.19,.97)}@keyframes shake{0%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}100%{transform:translateX(0)}}
+    .pulse{animation:pulse 1s ease-in-out}@keyframes pulse{0%{opacity:1}50%{opacity:0.4;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
   </style>
 </head>
 <body>
@@ -47,6 +59,22 @@
           <div style="text-align:right">
             <div class="small">我的玩家 ID</div>
             <div id="playerId" style="font-weight:700">-</div>
+            <div class="small">我的名称</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div id="playerName" style="font-weight:700;flex:1">-</div>
+              <button id="editNameBtn" class="ghost" style="padding:4px 6px;font-size:10px;line-height:1">编辑</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <div class="small">在线用户数量</div>
+            <div id="onlineCount" style="font-weight:700; color: #22c55e;">0/2</div>
+          </div>
+          <div style="text-align:right">
+            <div class="small">对手</div>
+            <div id="opponentName" style="font-weight:700; color: #60a5fa;">等待加入...</div>
           </div>
         </div>
 
@@ -133,6 +161,24 @@
       <div class="restart">
         <button id="restartBtn" class="primary">再来一局（重置房间）</button>
         <button id="closeModal" class="ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 用户名称编辑模态对话框 -->
+  <div id="nameEditModal" class="modal" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px">
+        <div style="font-size:22px;font-weight:800;color:var(--accent-2)">修改用户名称</div>
+      </div>
+      <div style="margin-top:20px">
+        <div class="small">输入新的用户名称：</div>
+        <input type="text" id="newNameInput" maxlength="12" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:var(--glass);color:#eaf6ff;font-size:16px;" placeholder="请输入用户名称" autocomplete="off" />
+        <div class="small" style="margin-top:4px;opacity:0.7">最多12个字符，中英文均可</div>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:8px;justify-content:center">
+        <button id="saveNameBtn" class="primary">保存</button>
+        <button id="cancelNameBtn" class="ghost">取消</button>
       </div>
     </div>
   </div>
@@ -282,11 +328,47 @@
         showResults(players);
       }
       
+      // 同步更新自己的用户名称（防止服务器端修改不同步）
+      const currentPlayer = players.find(p => p.id === playerId);
+      if (currentPlayer && currentPlayer.name !== playerName) {
+        console.log(`用户名称已同步更新: ${playerName} -> ${currentPlayer.name}`);
+        playerName = currentPlayer.name;
+        playerNameEl.textContent = playerName;
+      }
+      
+      // 更新在线用户数量和对手名称
+      const onlineCount = players.filter(p => p.online).length;
+      onlineCountEl.textContent = `${onlineCount}/2`;
+      
+      // 找到对手（除了自己之外的在线玩家）
+      const onlinePlayers = players.filter(p => p.online && p.id !== playerId);
+      if (onlinePlayers.length > 0) {
+        const opponent = onlinePlayers[0];
+        const previousOpponentName = opponentNameEl.textContent;
+        
+        // 如果对手名称发生变化，显示通知（包括初始状态变化）
+        if (previousOpponentName !== opponent.name) {
+          console.log(`对手名称已更新: ${previousOpponentName} -> ${opponent.name}`);
+          opponentNameEl.textContent = opponent.name;
+          opponentNameEl.style.color = '#60a5fa';
+          
+          // 如果不是从"等待加入..."状态变化，添加视觉通知
+          if (previousOpponentName !== '等待加入...') {
+            console.log(`对手名称修改通知: ${previousOpponentName} -> ${opponent.name}`);
+            // 可以在这里添加视觉通知，比如对手名称闪烁一下
+            opponentNameEl.style.animation = 'pulse 1s';
+            setTimeout(() => {
+              opponentNameEl.style.animation = '';
+            }, 1000);
+          }
+        }
+      } else {
+        opponentNameEl.textContent = '等待加入...';
+        opponentNameEl.style.color = '#94a3b8';
+      }
+      
       // 更新玩家列表
       renderPlayers(players);
-      
-      // 更新开始按钮状态
-      const onlineCount = players.filter(p => p.online).length;
       console.log('房间状态更新:', {
         roomState: room.state,
         onlineCount,
@@ -312,10 +394,13 @@
     
     // 发送消息到服务器
     function sendToServer(message) {
+      console.log('发送消息到服务器:', message);
       if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('WebSocket连接正常，发送消息');
         ws.send(JSON.stringify(message));
       } else {
         console.warn('WebSocket未连接，无法发送消息:', message);
+        console.warn('WebSocket状态:', ws ? ws.readyState : 'null');
       }
     }
     
@@ -352,6 +437,16 @@
     // UI refs
     const roomIdEl = document.getElementById('roomId');
     const playerIdEl = document.getElementById('playerId');
+    const playerNameEl = document.getElementById('playerName');
+    const editNameBtn = document.getElementById('editNameBtn');
+    const onlineCountEl = document.getElementById('onlineCount');
+    const opponentNameEl = document.getElementById('opponentName');
+    
+    // 名称编辑模态对话框元素
+    const nameEditModal = document.getElementById('nameEditModal');
+    const newNameInput = document.getElementById('newNameInput');
+    const saveNameBtn = document.getElementById('saveNameBtn');
+    const cancelNameBtn = document.getElementById('cancelNameBtn');
     const createRoomBtn = document.getElementById('createRoomBtn');
     const joinRoomBtn = document.getElementById('joinRoomBtn');
     const startBtn = document.getElementById('startBtn');
@@ -433,7 +528,10 @@
 
     // UI helpers
     function setRoomIdText(id){ roomIdEl.textContent = id; }
-    function setPlayerIdText(){ playerIdEl.textContent = playerId; }
+    function setPlayerIdText(){ 
+      playerIdEl.textContent = playerId; 
+      playerNameEl.textContent = playerName; 
+    }
 
     // create room
     createRoomBtn.addEventListener('click', ()=>{
@@ -632,6 +730,11 @@
       setRoomIdText('本地练习');
       setPlayerIdText();
       
+      // 更新在线用户数量和对手显示
+      onlineCountEl.textContent = '1/1';
+      opponentNameEl.textContent = '单人练习';
+      opponentNameEl.style.color = '#22c55e';
+      
       // 生成题目
       problems = generateProblems(problemCount);
       currentProblemIndex = 0;
@@ -703,6 +806,69 @@
       `;
       usedTime.textContent = Math.floor((Date.now() - startTs)/1000) + 's';
       endModal.style.display = 'flex';
+    }
+
+    // 名称编辑功能
+    editNameBtn.addEventListener('click', () => {
+      newNameInput.value = playerName;
+      nameEditModal.style.display = 'flex';
+      newNameInput.focus();
+      newNameInput.select();
+    });
+
+    // 保存新名称
+    saveNameBtn.addEventListener('click', savePlayerName);
+    newNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        savePlayerName();
+      } else if (e.key === 'Escape') {
+        cancelNameEdit();
+      }
+    });
+
+    // 取消编辑
+    cancelNameBtn.addEventListener('click', cancelNameEdit);
+    nameEditModal.addEventListener('click', (e) => {
+      if (e.target === nameEditModal) {
+        cancelNameEdit();
+      }
+    });
+
+    function savePlayerName() {
+      const newName = newNameInput.value.trim();
+      if (!newName) {
+        alert('用户名称不能为空');
+        return;
+      }
+      if (newName.length > 12) {
+        alert('用户名称不能超过12个字符');
+        return;
+      }
+      
+      const oldName = playerName;
+      
+      // 更新本地显示
+      playerName = newName;
+      playerNameEl.textContent = playerName;
+      console.log(`用户名称已修改: ${oldName} -> ${newName}`);
+      
+      // 发送到服务器
+      if (!singlePlayerMode && ws && ws.readyState === WebSocket.OPEN) {
+        console.log('发送名称更新到服务器...');
+        sendToServer({
+          type: 'update_player_name',
+          name: playerName
+        });
+      } else {
+        console.log('单人练习模式或服务器连接断开，仅本地更新名称');
+      }
+      
+      // 关闭模态对话框
+      nameEditModal.style.display = 'none';
+    }
+
+    function cancelNameEdit() {
+      nameEditModal.style.display = 'none';
     }
 
     // 服务器连接状态显示
