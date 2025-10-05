@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-本地Python WebSocket服务器，替代Firebase实现心算双人对战游戏
-使用WebSocket进行实时通信，内存存储游戏数据
+合并的服务器：同时提供HTTP文件服务和WebSocket游戏服务
+使用单一进程和端口，简化部署和使用
 """
 
 import asyncio
@@ -9,14 +9,19 @@ import websockets
 import json
 import logging
 import time
+import os
+import mimetypes
 from typing import Dict, List, Optional, Set
 import random
 import string
 from dataclasses import dataclass, asdict
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
+import websockets.server
+from websockets.server import WebSocketServerProtocol
 
 # 配置日志
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # 游戏常量
@@ -264,25 +269,28 @@ class GameServer:
             logger.warning(f"无法更新玩家 {player_id} 的名称: 房间不存在或玩家不在房间中")
 
     async def restart_game(self, player_id):
-        """重新开始游戏"""
+        """重新开始游戏（保持房间号）"""
         room_id = self.player_rooms.get(player_id)
         if not room_id or room_id not in self.rooms:
             return False
         
         room = self.rooms[room_id]
+        # 保持房间状态为waiting，但不清除房间ID
         room.state = 'waiting'
         room.problems = []
         room.start_ts = None
         room.finished_at = None
+        # 注意：房间ID保持不变，这样玩家可以继续使用相同的房间号
         
         # 重置所有玩家统计
         for player in self.room_players[room_id].values():
             player.correct = 0
             player.wrong = 0
             player.attempted = 0
+            player.last_seen = time.time()  # 更新最后活跃时间
         
         await self.broadcast_room_update(room_id)
-        logger.info(f"房间 {room_id} 游戏重置")
+        logger.info(f"房间 {room_id} 游戏重置（保持房间号）")
         return True
 
     async def broadcast_room_update(self, room_id):
@@ -337,7 +345,6 @@ class GameServer:
 
     async def handle_message(self, websocket, message_data):
         """处理客户端消息"""
-        print(f"收到消息: {message_data}")  # 临时调试
         player_id = self.ws_to_player.get(websocket)
         if not player_id:
             logger.warning(f"收到未注册客户端的消息: {message_data}")
@@ -346,7 +353,6 @@ class GameServer:
         try:
             message = json.loads(message_data)
             msg_type = message.get('type')
-            print(f"玩家 {player_id} 发送消息: {msg_type}")  # 临时调试
             logger.debug(f"收到玩家 {player_id} 的消息类型: {msg_type}")
             logger.debug(f"消息内容: {message}")
             
@@ -409,11 +415,10 @@ class GameServer:
     async def handle_client(self, websocket, path):
         """处理客户端连接"""
         player_id = None
-        print(f"新客户端连接: {path}")  # 临时调试
+        logger.info(f"新客户端连接: {path}")
         try:
             # 等待客户端发送player_id
             message = await websocket.recv()
-            print(f"收到注册消息: {message}")  # 临时调试
             data = json.loads(message)
             if data.get('type') == 'register':
                 player_id = data.get('player_id')
@@ -435,9 +440,7 @@ class GameServer:
                     await self.join_room(player_id, room_id)
             
             # 持续处理消息
-            print(f"开始监听玩家 {player_id} 的消息")  # 临时调试
             async for message in websocket:
-                print(f"收到玩家 {player_id} 的原始消息: {message}")  # 临时调试
                 await self.handle_message(websocket, message)
                 
         except websockets.exceptions.ConnectionClosed:
@@ -453,21 +456,133 @@ class GameServer:
             await asyncio.sleep(HEARTBEAT_INTERVAL)
             await self.check_inactive_players()
 
+class HTTPHandler:
+    """HTTP请求处理器"""
+    
+    def __init__(self, document_root='.'):
+        self.document_root = document_root
+    
+    def get_mime_type(self, filepath):
+        """获取文件的MIME类型"""
+        mime_type, _ = mimetypes.guess_type(filepath)
+        if mime_type is None:
+            if filepath.endswith('.js'):
+                return 'application/javascript'
+            elif filepath.endswith('.css'):
+                return 'text/css'
+            else:
+                return 'text/html'
+        return mime_type
+    
+    async def handle_request(self, reader, writer):
+        """处理HTTP请求"""
+        try:
+            # 读取请求行
+            request_line = await reader.readline()
+            request_line = request_line.decode('utf-8').strip()
+            
+            if not request_line:
+                writer.close()
+                return
+            
+            # 解析请求
+            method, path, version = request_line.split(' ')
+            
+            # 读取头部
+            headers = {}
+            while True:
+                header_line = await reader.readline()
+                header_line = header_line.decode('utf-8').strip()
+                if not header_line:
+                    break
+                if ':' in header_line:
+                    key, value = header_line.split(':', 1)
+                    headers[key.strip()] = value.strip()
+            
+            # 构建文件路径
+            if path == '/':
+                filepath = os.path.join(self.document_root, 'index.html')
+            else:
+                filepath = os.path.join(self.document_root, path.lstrip('/'))
+            
+            # 安全检查
+            filepath = os.path.abspath(filepath)
+            if not filepath.startswith(os.path.abspath(self.document_root)):
+                # 403 Forbidden
+                response = "HTTP/1.1 403 Forbidden\r\n\r\n"
+                writer.write(response.encode())
+                writer.close()
+                return
+            
+            # 检查文件是否存在
+            if os.path.exists(filepath) and os.path.isfile(filepath):
+                # 读取文件内容
+                with open(filepath, 'rb') as f:
+                    content = f.read()
+                
+                # 构建响应
+                mime_type = self.get_mime_type(filepath)
+                response = f"HTTP/1.1 200 OK\r\nContent-Type: {mime_type}\r\nContent-Length: {len(content)}\r\n\r\n"
+                writer.write(response.encode())
+                writer.write(content)
+            else:
+                # 404 Not Found
+                html_content = b"""
+<!DOCTYPE html>
+<html>
+<head><title>404 Not Found</title></head>
+<body>
+<h1>404 Not Found</h1>
+<p>The requested URL was not found on this server.</p>
+</body>
+</html>
+"""
+                response = f"HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: {len(html_content)}\r\n\r\n"
+                writer.write(response.encode())
+                writer.write(html_content)
+            
+            writer.close()
+            
+        except Exception as e:
+            logger.error(f"处理HTTP请求时出错: {e}")
+            writer.close()
+
 async def main():
-    """启动服务器"""
-    server = GameServer()
+    """启动合并服务器"""
+    # 创建游戏服务器
+    game_server = GameServer()
     
     # 启动心跳检查器
-    asyncio.create_task(server.start_heartbeat_checker())
+    asyncio.create_task(game_server.start_heartbeat_checker())
+    
+    # 启动HTTP服务器
+    http_handler = HTTPHandler()
+    
+    host = "localhost"
+    http_port = 8000
+    ws_port = 8765
+    
+    logger.info("启动合并服务器...")
+    logger.info(f"HTTP服务器启动在 http://{host}:{http_port}")
+    logger.info(f"WebSocket服务器启动在 ws://{host}:{ws_port}")
+    
+    # 启动HTTP服务器
+    http_server = await asyncio.start_server(
+        http_handler.handle_request,
+        host,
+        http_port
+    )
     
     # 启动WebSocket服务器
-    host = "localhost"
-    port = 8765
-    
-    logger.info(f"游戏服务器启动在 ws://{host}:{port}")
-    
-    async with websockets.serve(server.handle_client, host, port):
+    async with websockets.serve(game_server.handle_client, host, ws_port):
+        logger.info("服务器启动完成！")
+        logger.info(f"请访问: http://{host}:{http_port}")
         await asyncio.Future()  # 保持服务器运行
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("服务器停止运行")
+    except Exception as e:
+        logger.error(f"服务器运行出错: {e}")
