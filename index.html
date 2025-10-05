@@ -637,36 +637,16 @@
       };
       saveRooms();
       
+      console.log('房主创建房间:', {
+        roomId,
+        host: rooms[roomId].host,
+        status: rooms[roomId].status
+      });
+      
       roomModal.style.display = 'none';
       problemText.textContent = '等待好友加入房间...';
       startBtn.style.display = 'none';
       answerRow.style.display = 'none';
-      
-      // 定期检查房间状态
-      const checkRoomInterval = setInterval(() => {
-        // 重新加载房间数据以获取最新状态
-        loadRooms();
-        
-        if (!rooms[roomId]) {
-          clearInterval(checkRoomInterval);
-          problemText.textContent = '房间已解散，请重新创建房间';
-          return;
-        }
-        
-        if (rooms[roomId].guest && rooms[roomId].status === 'waiting') {
-          clearInterval(checkRoomInterval);
-          gameState.opponentName = rooms[roomId].guest;
-          opponentNameEl.textContent = gameState.opponentName;
-          problemText.textContent = '好友已加入，可以开始游戏了！';
-          startBtn.style.display = 'block';
-          startBtn.textContent = '开始游戏';
-          console.log('房主检测到好友加入:', {
-            roomId,
-            guest: rooms[roomId].guest,
-            status: rooms[roomId].status
-          });
-        }
-      }, 1000);
     });
 
     // 加入房间
@@ -813,7 +793,7 @@
     timerBar.style.width = '100%';
     updateStats();
     
-    // 定期刷新房间数据（每1秒）
+    // 定期刷新房间数据（每500毫秒）
     setInterval(() => {
       if (gameState.mode === 'battle' && gameState.roomId) {
         loadRooms();
@@ -821,6 +801,13 @@
         
         if (rooms[gameState.roomId]) {
           const room = rooms[gameState.roomId];
+          console.log('检查房间状态:', {
+            roomId: gameState.roomId,
+            isHost: room.host === gameState.playerName,
+            guest: room.guest,
+            status: room.status,
+            running: gameState.running
+          });
           
           // 更新对手信息
           if (room.host === gameState.playerName) {
@@ -832,11 +819,7 @@
                 problemText.textContent = '好友已加入，可以开始游戏了！';
                 startBtn.style.display = 'block';
                 startBtn.textContent = '开始游戏';
-              }
-            } else {
-              // 还没有客人加入
-              if (startBtn.style.display === 'none' && problemText.textContent !== '等待好友加入房间...') {
-                problemText.textContent = '等待好友加入房间...';
+                console.log('房主显示开始按钮');
               }
             }
           } else if (room.guest === gameState.playerName) {
@@ -866,7 +849,7 @@
           startBtn.style.display = 'none';
         }
       }
-    }, 1000);
+    }, 500);
   </script>
 </body>
 </html>
