@@ -1,117 +1,168 @@
-# 心算对战游戏
+# 两位数心算游戏
 
-一个基于WebSocket的双人心算对战游戏，使用Python开发。
+一个纯前端实现的两位数心算对战游戏，支持单人练习和好友对战模式。
 
 ## 功能特性
 
-- 🎮 双人实时对战
-- 🧮 数学心算挑战
-- 📊 实时比分统计
-- 💻 响应式Web界面
-- 🌐 局域网多人游戏支持
-- ⚡ WebSocket实时通信
-- 🔊 音效反馈
+- 🎮 单人练习模式 - 随时随地训练心算能力
+- 👥 好友对战模式 - 与朋友一起挑战
+- 🧮 数学心算挑战 - 两位数加减法练习
+- 📊 实时比分统计 - 详细的成绩分析
+- 💻 响应式Web界面 - 支持手机、平板、电脑
+- 🔊 音效反馈 - 答对/答错的即时反馈
+- 🎨 精美的视觉效果 - 五彩纸屑庆祝动画
+- ⏱️ 计时挑战 - 60秒限时答题
 
 ## 技术栈
 
-- **后端**: Python + WebSockets
-- **前端**: HTML5 + CSS3 + JavaScript
-- **包管理**: uv
-- **通信协议**: WebSocket
+- **前端**: HTML5 + CSS3 + JavaScript (ES6+)
+- **样式**: CSS Grid + Flexbox + CSS动画
+- **音效**: Web Audio API
+- **部署**: Vercel 静态网站托管
+- **包管理**: npm/uv
 
-## 环境要求
+## 在线访问
 
-- Python 3.8+
-- uv (Python包管理器)
+游戏已部署在 Vercel，可以直接在线访问：
+[在线演示链接] (部署后会显示)
 
-## 安装和运行
+## 本地运行
 
-### 1. 克隆项目
+### 方法1: 使用 Python HTTP 服务器
 
 ```bash
+# 克隆项目
 git clone <repository-url>
 cd match-cal
+
+# 启动本地服务器
+python -m http.server 8000
+
+# 或者使用项目脚本
+npm run dev
 ```
 
-### 2. 使用uv安装依赖
+### 方法2: 使用 Node.js (需要安装 http-server)
 
 ```bash
-uv sync
+# 安装 http-server
+npm install -g http-server
+
+# 启动服务器
+http-server -p 8000
 ```
 
-### 3. 启动服务器
+访问 `http://localhost:8000` 即可开始游戏。
 
-#### 默认配置启动（推荐）
+## 部署到 Vercel
+
+### 自动部署（推荐）
+
+1. 将项目推送到 GitHub
+2. 在 Vercel 中导入项目
+3. Vercel 会自动识别并部署静态网站
+
+### 手动部署
+
 ```bash
-uv run run_server.py
+# 安装 Vercel CLI
+npm install -g vercel
+
+# 登录 Vercel
+vercel login
+
+# 部署项目
+npm run deploy
 ```
 
-#### 自定义配置启动
-```bash
-uv run run_server.py --host 0.0.0.0 --http-port 8000 --ws-port 8765
-```
+## 游戏模式
 
-#### 仅本地访问
-```bash
-uv run run_server.py --local-only
-```
+### 单人练习模式
+- 点击"单人练习"按钮
+- 点击"开始练习"开始游戏
+- 60秒内完成尽可能多的题目
+- 游戏结束后显示详细成绩
 
-### 4. 访问游戏
+### 好友对战模式
+- 点击"好友对战"按钮
+- 创建房间或加入现有房间
+- 分享房间号给好友
+- 双方准备后开始对战
+- 游戏结束后比较成绩
 
-打开浏览器访问：`http://localhost:8000`
+## 游戏规则
 
-如果是局域网配置，其他设备可通过 `http://<你的IP地址>:8000` 访问。
-
-## 命令行参数
-
-- `--host`: 服务器侦听地址（默认：0.0.0.0）
-- `--http-port`: HTTP服务器端口（默认：8000）
-- `--ws-port`: WebSocket服务器端口（默认：8765）
-- `--local-only`: 仅本地访问（等同于--host localhost）
-
-## 配置文件
-
-项目使用`.env`文件管理环境变量和API密钥，请确保在项目根目录创建`.env`文件。
+1. **题目类型**: 两位数加减法 (例如: 45 + 67 = ?, 89 - 23 = ?)
+2. **时间限制**: 60秒
+3. **计分方式**: 
+   - 答对加分，答错不扣分
+   - 正确率 = 答对题数 / 总答题数 × 100%
+4. **操作方式**: 
+   - 输入答案后按 Enter 或点击"提交"
+   - 可以点击"跳过"跳过当前题目（计为答错）
 
 ## 项目结构
 
 ```
 match-cal/
-├── pyproject.toml          # 项目配置和依赖
-├── run_server.py           # 服务器启动脚本
-├── combined_server.py      # 合并的HTTP和WebSocket服务器
-├── test_network_config.py  # 网络配置测试工具
-├── index.html             # 游戏主页面
-├── ring.flac              # 音效文件
-├── requirements.txt       # 旧版依赖文件（已弃用）
-└── CLAUDE.md              # 项目开发说明
+├── index.html          # 游戏主页面
+├── package.json        # 项目配置和脚本
+├── pyproject.toml      # Python项目配置（用于开发）
+├── vercel.json         # Vercel部署配置
+├── .gitignore          # Git忽略文件
+├── README.md           # 项目说明
+└── CLAUDE.md           # 开发说明
 ```
-
-## 游戏规则
-
-1. 两名玩家同时开始游戏
-2. 在60秒内完成尽可能多的数学计算题
-3. 题目包括加减乘除运算
-4. 正确答案加分，错误答案不扣分
-5. 时间结束后显示最终得分和胜者
 
 ## 开发命令
 
-### 测试网络配置
 ```bash
-uv run test_network_config.py
+# 本地开发
+npm run dev
+
+# 构建项目（静态文件无需构建）
+npm run build
+
+# 预览部署
+npm run preview
+
+# 部署到 Vercel
+npm run deploy
 ```
 
-### 直接运行合并服务器
-```bash
-uv run combined_server.py --host 0.0.0.0 --port 8000
-```
+## 浏览器兼容性
 
-## 故障排除
+- Chrome 60+
+- Firefox 55+
+- Safari 12+
+- Edge 79+
 
-1. **端口被占用**: 更改端口号或关闭占用端口的程序
-2. **局域网访问失败**: 检查防火墙设置和网络配置
-3. **WebSocket连接失败**: 确认端口配置正确且未被阻止
+## 特色功能
+
+### 🎨 视觉设计
+- 现代化的深色主题设计
+- 流畅的CSS动画效果
+- 响应式布局适配各种设备
+- 五彩纸屑庆祝动画
+
+### 🎵 音效系统
+- Web Audio API生成的音效
+- 答对/答错的即时音效反馈
+- 无需外部音频文件
+
+### 📱 移动端优化
+- 触摸友好的界面设计
+- 数字键盘优化
+- 全屏体验支持
+
+### ⚡ 性能优化
+- 纯前端实现，加载速度快
+- 无服务器依赖，可离线使用
+- 高效的Canvas动画渲染
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
 
 ## 许可证
 

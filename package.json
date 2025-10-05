@@ -1,0 +1,18 @@
+{
+  "name": "match-cal",
+  "version": "0.1.0",
+  "description": "两位数心算对战游戏",
+  "main": "index.html",
+  "scripts": {
+    "dev": "python -m http.server 8000",
+    "build": "echo 'Build complete - static site ready for deployment'",
+    "preview": "python -m http.server 8000",
+    "deploy": "vercel --prod"
+  },
+  "keywords": ["math", "game", "education", "calculation", "brain-training"],
+  "author": "clark",
+  "license": "MIT",
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  }
+}

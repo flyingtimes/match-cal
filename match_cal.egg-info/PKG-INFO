@@ -1,7 +1,0 @@
-Metadata-Version: 2.4
-Name: match-cal
-Version: 0.1.0
-Summary: 双人心算对战游戏
-Author-email: clark <clark@example.com>
-Requires-Python: >=3.8
-Requires-Dist: websockets>=12.0
