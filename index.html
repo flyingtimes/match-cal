@@ -644,6 +644,9 @@
       
       // 定期检查房间状态
       const checkRoomInterval = setInterval(() => {
+        // 重新加载房间数据以获取最新状态
+        loadRooms();
+        
         if (!rooms[roomId]) {
           clearInterval(checkRoomInterval);
           problemText.textContent = '房间已解散，请重新创建房间';
@@ -657,6 +660,11 @@
           problemText.textContent = '好友已加入，可以开始游戏了！';
           startBtn.style.display = 'block';
           startBtn.textContent = '开始游戏';
+          console.log('房主检测到好友加入:', {
+            roomId,
+            guest: rooms[roomId].guest,
+            status: rooms[roomId].status
+          });
         }
       }, 1000);
     });
@@ -711,6 +719,13 @@
           gameState.opponentName = rooms[roomId].host;
           opponentNameEl.textContent = gameState.opponentName;
           saveRooms();
+          
+          console.log('客人加入房间:', {
+            roomId,
+            host: rooms[roomId].host,
+            guest: rooms[roomId].guest,
+            status: rooms[roomId].status
+          });
           
           roomModal.style.display = 'none';
           problemText.textContent = '已加入房间，等待房主开始游戏...';
@@ -798,7 +813,7 @@
     timerBar.style.width = '100%';
     updateStats();
     
-    // 定期刷新房间数据（每2秒）
+    // 定期刷新房间数据（每1秒）
     setInterval(() => {
       if (gameState.mode === 'battle' && gameState.roomId) {
         loadRooms();
@@ -808,27 +823,42 @@
           const room = rooms[gameState.roomId];
           
           // 更新对手信息
-          if (room.host === gameState.playerName && room.guest) {
-            gameState.opponentName = room.guest;
-            opponentNameEl.textContent = gameState.opponentName;
-            if (room.status === 'waiting' && startBtn.style.display === 'none') {
-              problemText.textContent = '好友已加入，可以开始游戏了！';
-              startBtn.style.display = 'block';
-              startBtn.textContent = '开始游戏';
+          if (room.host === gameState.playerName) {
+            // 房主的逻辑
+            if (room.guest) {
+              gameState.opponentName = room.guest;
+              opponentNameEl.textContent = gameState.opponentName;
+              if (room.status === 'waiting' && startBtn.style.display === 'none') {
+                problemText.textContent = '好友已加入，可以开始游戏了！';
+                startBtn.style.display = 'block';
+                startBtn.textContent = '开始游戏';
+              }
+            } else {
+              // 还没有客人加入
+              if (startBtn.style.display === 'none' && problemText.textContent !== '等待好友加入房间...') {
+                problemText.textContent = '等待好友加入房间...';
+              }
             }
           } else if (room.guest === gameState.playerName) {
+            // 客人的逻辑
             gameState.opponentName = room.host;
             opponentNameEl.textContent = gameState.opponentName;
             
             // 如果房主已经开始游戏，而自己还没开始，则自动开始
             if (room.status === 'playing' && !gameState.running) {
-              startGame();
+              problemText.textContent = '房主已开始游戏，正在同步...';
+              setTimeout(() => {
+                startGame();
+              }, 500);
             }
           }
           
           // 如果游戏已经开始，检查是否需要同步开始
           if (room.status === 'playing' && !gameState.running) {
-            startGame();
+            problemText.textContent = '游戏已开始，正在同步...';
+            setTimeout(() => {
+              startGame();
+            }, 500);
           }
         } else {
           // 房间不存在了
@@ -836,7 +866,7 @@
           startBtn.style.display = 'none';
         }
       }
-    }, 2000);
+    }, 1000);
   </script>
 </body>
 </html>
