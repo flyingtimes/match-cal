@@ -338,7 +338,7 @@
     // 游戏状态
     let gameState = {
       mode: 'single', // 'single' 或 'battle'
-      playerName: '玩家',
+      playerName: '玩家' + Math.floor(Math.random() * 1000), // 添加随机数字避免重名
       roomId: null,
       currentProblemIndex: 0,
       problems: [],
