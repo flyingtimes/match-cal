@@ -191,6 +191,7 @@
         <div style="margin-top:12px;padding:12px;background:var(--glass);border-radius:8px;">
           <div style="font-size:18px;font-weight:700;margin-bottom:8px;">房间号：<span id="roomCode">-</span></div>
           <div class="small">分享这个房间号给好友，让他们加入对战</div>
+          <div class="small" style="margin-top:4px;opacity:0.7;">💡 提示：房间数据保存在本地浏览器中，同一设备上的不同标签页可以互相加入</div>
         </div>
       </div>
       <div style="margin-top:16px">
@@ -353,8 +354,49 @@
       opponentAttempted: 0
     };
 
-    // 简单的房间管理（本地存储模拟）
+    // 房间管理（使用localStorage持久化）
     let rooms = {};
+    
+    // 从localStorage加载房间数据
+    function loadRooms() {
+      const savedRooms = localStorage.getItem('matchCalRooms');
+      if (savedRooms) {
+        try {
+          rooms = JSON.parse(savedRooms);
+        } catch (e) {
+          rooms = {};
+        }
+      }
+    }
+    
+    // 保存房间数据到localStorage
+    function saveRooms() {
+      localStorage.setItem('matchCalRooms', JSON.stringify(rooms));
+    }
+    
+    // 清理过期房间（超过30分钟）
+    function cleanupExpiredRooms() {
+      const now = Date.now();
+      const expiredRooms = [];
+      
+      for (const roomId in rooms) {
+        if (now - rooms[roomId].created > 30 * 60 * 1000) { // 30分钟
+          expiredRooms.push(roomId);
+        }
+      }
+      
+      expiredRooms.forEach(roomId => {
+        delete rooms[roomId];
+      });
+      
+      if (expiredRooms.length > 0) {
+        saveRooms();
+      }
+    }
+    
+    // 初始化时加载房间数据并清理过期房间
+    loadRooms();
+    cleanupExpiredRooms();
 
     // 题目生成
     function randInt(min, max){ 
@@ -555,24 +597,37 @@
       roomIdEl.textContent = roomId;
       roomCodeEl.textContent = roomId;
       
-      // 模拟房间数据存储（实际应用中应该使用后端服务）
+      // 创建房间并保存到localStorage
       rooms[roomId] = {
         host: gameState.playerName,
         guest: null,
         hostScore: 0,
         guestScore: 0,
-        created: Date.now()
+        created: Date.now(),
+        status: 'waiting' // waiting, playing, finished
       };
+      saveRooms();
       
       roomModal.style.display = 'none';
       problemText.textContent = '等待好友加入房间...';
       startBtn.style.display = 'none';
       answerRow.style.display = 'none';
       
-      // 模拟对手加入（实际应用中应该使用实时通信）
-      setTimeout(() => {
-        if(rooms[roomId] && !rooms[roomId].guest) {
-          // 可以在这里添加模拟对手的逻辑
+      // 定期检查房间状态
+      const checkRoomInterval = setInterval(() => {
+        if (!rooms[roomId]) {
+          clearInterval(checkRoomInterval);
+          problemText.textContent = '房间已解散，请重新创建房间';
+          return;
+        }
+        
+        if (rooms[roomId].guest && rooms[roomId].status === 'waiting') {
+          clearInterval(checkRoomInterval);
+          gameState.opponentName = rooms[roomId].guest;
+          opponentNameEl.textContent = gameState.opponentName;
+          problemText.textContent = '好友已加入，可以开始游戏了！';
+          startBtn.style.display = 'block';
+          startBtn.textContent = '开始游戏';
         }
       }, 1000);
     });
@@ -585,23 +640,55 @@
         return;
       }
       
+      // 重新加载房间数据以确保是最新的
+      loadRooms();
+      
       if(rooms[roomId]) {
-        gameState.roomId = roomId;
-        gameState.mode = 'battle';
-        gameModeEl.textContent = '好友对战';
-        battleInfoEl.style.display = 'block';
-        roomIdEl.textContent = roomId;
+        // 检查房间是否已满
+        if (rooms[roomId].guest && rooms[roomId].guest !== gameState.playerName) {
+          alert('房间已满，请加入其他房间');
+          return;
+        }
         
-        // 模拟加入房间
-        rooms[roomId].guest = gameState.playerName;
-        gameState.opponentName = rooms[roomId].host;
-        opponentNameEl.textContent = gameState.opponentName;
-        
-        roomModal.style.display = 'none';
-        problemText.textContent = '已加入房间，等待开始...';
-        startBtn.style.display = 'block';
-        startBtn.textContent = '开始游戏';
-        answerRow.style.display = 'none';
+        // 检查是否是房主重新加入
+        if (rooms[roomId].host === gameState.playerName) {
+          gameState.roomId = roomId;
+          gameState.mode = 'battle';
+          gameModeEl.textContent = '好友对战';
+          battleInfoEl.style.display = 'block';
+          roomIdEl.textContent = roomId;
+          
+          if (rooms[roomId].guest) {
+            gameState.opponentName = rooms[roomId].guest;
+            opponentNameEl.textContent = gameState.opponentName;
+            problemText.textContent = '好友已加入，可以开始游戏了！';
+            startBtn.style.display = 'block';
+            startBtn.textContent = '开始游戏';
+          } else {
+            problemText.textContent = '等待好友加入房间...';
+            startBtn.style.display = 'none';
+          }
+          answerRow.style.display = 'none';
+        } else {
+          // 作为客人加入房间
+          gameState.roomId = roomId;
+          gameState.mode = 'battle';
+          gameModeEl.textContent = '好友对战';
+          battleInfoEl.style.display = 'block';
+          roomIdEl.textContent = roomId;
+          
+          // 更新房间信息
+          rooms[roomId].guest = gameState.playerName;
+          gameState.opponentName = rooms[roomId].host;
+          opponentNameEl.textContent = gameState.opponentName;
+          saveRooms();
+          
+          roomModal.style.display = 'none';
+          problemText.textContent = '已加入房间，等待房主开始游戏...';
+          startBtn.style.display = 'block';
+          startBtn.textContent = '开始游戏';
+          answerRow.style.display = 'none';
+        }
       } else {
         alert('房间不存在或已过期');
       }
@@ -674,6 +761,36 @@
     timeText.textContent = DURATION + 's';
     timerBar.style.width = '100%';
     updateStats();
+    
+    // 定期刷新房间数据（每5秒）
+    setInterval(() => {
+      if (gameState.mode === 'battle' && gameState.roomId) {
+        loadRooms();
+        cleanupExpiredRooms();
+        
+        if (rooms[gameState.roomId]) {
+          const room = rooms[gameState.roomId];
+          
+          // 更新对手信息
+          if (room.host === gameState.playerName && room.guest) {
+            gameState.opponentName = room.guest;
+            opponentNameEl.textContent = gameState.opponentName;
+            if (room.status === 'waiting' && startBtn.style.display === 'none') {
+              problemText.textContent = '好友已加入，可以开始游戏了！';
+              startBtn.style.display = 'block';
+              startBtn.textContent = '开始游戏';
+            }
+          } else if (room.guest === gameState.playerName) {
+            gameState.opponentName = room.host;
+            opponentNameEl.textContent = gameState.opponentName;
+          }
+        } else {
+          // 房间不存在了
+          problemText.textContent = '房间已解散，请重新创建房间';
+          startBtn.style.display = 'none';
+        }
+      }
+    }, 5000);
   </script>
 </body>
 </html>
