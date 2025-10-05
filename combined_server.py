@@ -11,6 +11,8 @@ import logging
 import time
 import os
 import mimetypes
+import argparse
+import socket
 from typing import Dict, List, Optional, Set
 import random
 import string
@@ -76,9 +78,9 @@ class GameServer:
         # WebSocket连接到玩家ID的映射
         self.ws_to_player: Dict[websockets.WebSocketServerProtocol, str] = {}
 
-    def generate_room_id(self, length=6):
+    def generate_room_id(self, length=3):
         """生成房间ID"""
-        return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+        return ''.join(random.choices(string.digits, k=length))
 
     def generate_player_name(self, player_id):
         """生成玩家名称"""
@@ -547,8 +549,34 @@ class HTTPHandler:
             logger.error(f"处理HTTP请求时出错: {e}")
             writer.close()
 
+def get_local_ip():
+    """获取本机局域网IP地址"""
+    try:
+        # 创建一个UDP socket连接到外网地址来获取本机IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "127.0.0.1"
+
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description='心算对战游戏服务器')
+    parser.add_argument('--host', default=os.getenv('GAME_HOST', '0.0.0.0'), 
+                       help='服务器侦听地址 (默认: 0.0.0.0，允许局域网访问)')
+    parser.add_argument('--http-port', type=int, default=int(os.getenv('HTTP_PORT', '8000')), 
+                       help='HTTP服务器端口 (默认: 8000)')
+    parser.add_argument('--ws-port', type=int, default=int(os.getenv('WS_PORT', '8765')), 
+                       help='WebSocket服务器端口 (默认: 8765)')
+    return parser.parse_args()
+
 async def main():
     """启动合并服务器"""
+    # 解析命令行参数
+    args = parse_args()
+    
     # 创建游戏服务器
     game_server = GameServer()
     
@@ -558,13 +586,19 @@ async def main():
     # 启动HTTP服务器
     http_handler = HTTPHandler()
     
-    host = "localhost"
-    http_port = 8000
-    ws_port = 8765
+    # 服务器配置
+    host = args.host
+    http_port = args.http_port
+    ws_port = args.ws_port
+    
+    # 获取本机IP用于显示
+    local_ip = get_local_ip()
     
     logger.info("启动合并服务器...")
-    logger.info(f"HTTP服务器启动在 http://{host}:{http_port}")
-    logger.info(f"WebSocket服务器启动在 ws://{host}:{ws_port}")
+    logger.info(f"服务器配置:")
+    logger.info(f"  侦听地址: {host}")
+    logger.info(f"  HTTP端口: {http_port}")
+    logger.info(f"  WebSocket端口: {ws_port}")
     
     # 启动HTTP服务器
     http_server = await asyncio.start_server(
@@ -576,7 +610,11 @@ async def main():
     # 启动WebSocket服务器
     async with websockets.serve(game_server.handle_client, host, ws_port):
         logger.info("服务器启动完成！")
-        logger.info(f"请访问: http://{host}:{http_port}")
+        logger.info(f"访问地址:")
+        logger.info(f"  本地访问: http://localhost:{http_port}")
+        if host == "0.0.0.0" and local_ip != "127.0.0.1":
+            logger.info(f"  局域网访问: http://{local_ip}:{http_port}")
+            logger.info(f"  WebSocket: ws://{local_ip}:{ws_port}")
         await asyncio.Future()  # 保持服务器运行
 
 if __name__ == "__main__":

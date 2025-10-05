@@ -541,7 +541,7 @@
       }
       const id = prompt('输入房间 ID 或粘贴链接：'); 
       if(!id) return;
-      const match = id.match(/room=([a-z0-9]+)/i);
+      const match = id.match(/room=(\d+)/i);
       const roomIdToJoin = match? match[1] : id.trim();
       sendToServer({ 
         type: 'join_room',
@@ -552,7 +552,7 @@
     // auto-join if URL contains room
     (()=>{
       const h = location.hash;
-      const m = h.match(/room=([a-z0-9]+)/i);
+      const m = h.match(/room=(\d+)/i);
       if(m){ 
         roomId = m[1]; 
         // 连接成功后会自动加入房间
@@ -584,6 +584,11 @@
     // start game (any player can request start if >=2 online)
     startBtn.addEventListener('click', ()=>{
       console.log('开始游戏按钮被点击');
+      if (singlePlayerMode) {
+        // 单人练习模式不需要服务器
+        startLocalSinglePlayer();
+        return;
+      }
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         alert('服务器连接不可用，请检查服务器是否运行');
         return;
@@ -747,10 +752,7 @@
       problemText.textContent = '点击开始单人练习';
       startBtn.textContent = '开始练习';
       startBtn.disabled = false;
-      startBtn.onclick = () => {
-        console.log('Start practice button clicked');
-        startLocalSinglePlayer();
-      };
+      // 不需要重新设置onclick，因为已经在startBtn的事件监听器中处理
     }
 
     function startLocalSinglePlayer() {
