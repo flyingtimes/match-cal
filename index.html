@@ -196,7 +196,7 @@
       </div>
       <div style="margin-top:16px">
         <div class="small">加入其他房间</div>
-        <input type="text" id="joinRoomInput" maxlength="6" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:var(--glass);color:#eaf6ff;font-size:16px;" placeholder="输入房间号" autocomplete="off" />
+        <input type="text" id="joinRoomInput" maxlength="3" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:var(--glass);color:#eaf6ff;font-size:16px;" placeholder="输入房间号" autocomplete="off" />
       </div>
       <div style="margin-top:20px;display:flex;gap:8px;justify-content:center">
         <button id="createRoomBtn" class="primary">创建房间</button>
@@ -436,7 +436,7 @@
 
     // 生成房间ID
     function generateRoomId() {
-      return Math.floor(100000 + Math.random() * 900000).toString();
+      return Math.floor(100 + Math.random() * 900).toString();
     }
 
     // UI 更新函数
