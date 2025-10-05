@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>两位数心算 — 双人对战（HTTP轮询版）</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg1:#0f172a;--bg2:#071233;--accent:#7dd3fc;--accent-2:#60a5fa;--card:#0b1220;--glass: rgba(255,255,255,0.06);}*{box-sizing:border-box}html,body{height:100%}body{margin:0;padding:0;font-family:'Rubik',system-ui,Arial;background:linear-gradient(135deg,var(--bg1),var(--bg2));color:#e6f0ff;display:flex;align-items:center;justify-content:center;min-height:100vh;overflow-x:hidden;}
+    .lights{position:fixed;inset:0;pointer-events:none;z-index:0}.lights::before,.lights::after{content:"";position:absolute;filter:blur(120px);opacity:0.7}.lights::before{width:50vmax;height:50vmax;background:radial-gradient(circle at 30% 30%, rgba(125,211,252,0.18), transparent 20%);left:-10%;top:-20%;animation:float1 8s ease-in-out infinite}.lights::after{width:60vmax;height:60vmax;background:radial-gradient(circle at 70% 70%, rgba(96,165,250,0.14), transparent 20%);right:-20%;bottom:-30%;animation:float2 12s ease-in-out infinite}@keyframes float1{0%{transform:translateY(0)}50%{transform:translateY(18px)}100%{transform:translateY(0)}}@keyframes float2{0%{transform:translateY(0)}50%{transform:translateY(-22px)}100%{transform:translateY(0)}}
+    .container{position:relative;z-index:2;width:min(1200px,96vw);padding:clamp(16px,3vw,28px);border-radius:18px;background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));box-shadow:0 10px 40px rgba(2,6,23,0.6);backdrop-filter: blur(6px);}header{display:flex;align-items:center;justify-content:space-between;gap:clamp(8px,2vw,16px);flex-wrap:wrap;}.title{display:flex;align-items:center;gap:clamp(10px,2vw,16px);flex:1;min-width:280px;}.logo{width:clamp(42px,6vw,56px);height:clamp(42px,6vw,56px);border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#01203a;font-size:clamp(16px,3vw,20px);box-shadow:0 6px 18px rgba(96,165,250,0.12);flex-shrink:0;}h1{margin:0;font-size:clamp(16px,3vw,20px);line-height:1.2;}p.lead{margin:0;color:rgba(230,240,255,0.78);font-size:clamp(12px,1.5vw,14px);line-height:1.4;}
+    .game-grid{display:grid;grid-template-columns:1fr min(320px,30vw);gap:clamp(12px,2vw,24px);margin-top:clamp(12px,2vw,20px);}.card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:clamp(16px,3vw,24px);border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.45);}.problem-area{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:clamp(200px,40vh,280px);gap:clamp(12px,2vw,20px);}.problem{font-size:clamp(32px,6vw,56px);font-weight:700;letter-spacing:clamp(2px,0.5vw,4px);color:#f8feff;text-shadow:0 6px 20px rgba(96,165,250,0.14);line-height:1.2;}.operator{font-size:clamp(18px,3vw,26px);color:var(--accent-2);opacity:0.95;}.answer-row{display:flex;gap:clamp(8px,1.5vw,12px);align-items:center;flex-wrap:wrap;justify-content:center;}.answer{font-size:clamp(20px,4vw,28px);padding:clamp(8px,2vw,14px);border-radius:10px;border:0;background:var(--glass);color:#eaf6ff;width:clamp(120px,30vw,180px);text-align:center;min-height:clamp(40px,8vw,50px);}button.primary{padding:clamp(10px,2vw,16px) clamp(12px,3vw,20px);border-radius:10px;border:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#042033;font-weight:700;cursor:pointer;box-shadow:0 8px 20px rgba(125,211,252,0.12);font-size:clamp(14px,2.5vw,16px);min-height:clamp(40px,8vw,48px);touch-action:manipulation;}button.ghost{padding:clamp(8px,1.5vw,12px) clamp(10px,2vw,16px);border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit;cursor:pointer;font-size:clamp(13px,2vw,14px);min-height:clamp(36px,7vw,44px);touch-action:manipulation;}
+    .side-stats{display:flex;flex-direction:column;gap:clamp(8px,2vw,16px)}.timer{height:clamp(14px,2vh,20px);background:rgba(255,255,255,0.04);border-radius:10px;overflow:hidden}.timer > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:100%;transform-origin:left}.stat-row{display:flex;align-items:center;justify-content:space-between;padding:clamp(8px,2vw,12px);border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));flex-wrap:wrap;gap:8px;}.stat{font-size:clamp(16px,3vw,20px);font-weight:700}.small{font-size:clamp(10px,1.5vw,12px);color:rgba(230,240,255,0.7);line-height:1.3;}.controls{display:flex;gap:clamp(6px,1.5vw,12px);margin-top:clamp(6px,1.5vw,12px);flex-wrap:wrap;}
+    #confettiCanvas{position:absolute;inset:0;pointer-events:none;z-index:3}
+    .modal{position:fixed;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(2,6,23,0.6), rgba(2,6,23,0.6));z-index:10;padding:20px;}.modal-card{width:min(560px,92vw);padding:clamp(16px,4vw,24px);border-radius:14px;background:linear-gradient(180deg,#062031, #021124);box-shadow:0 18px 60px rgba(2,6,23,0.7);text-align:center;max-height:90vh;overflow-y:auto;}.big-num{font-size:clamp(32px,6vw,48px);font-weight:800}.restart{margin-top:clamp(12px,2vw,20px)}
+    
+    /* 添加连接状态指示器 */
+    .connection-status {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 1000;
+      transition: all 0.3s ease;
+    }
+    .connection-status.connected {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .connection-status.disconnected {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .connection-status.connecting {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+
+    /* 响应式设计保持不变 */
+    @media (max-width:1024px) and (min-width:769px){
+      .container{width:min(1000px,94vw);padding:20px;}
+      .game-grid{grid-template-columns:1fr min(280px,28vw);gap:16px;}
+      .problem{font-size:48px;letter-spacing:3px;}
+      .answer{width:140px;font-size:24px;}
+      .title{min-width:240px;}
+      .controls{gap:10px;}
+    }
+    
+    @media (max-width:860px){
+      .game-grid{grid-template-columns:1fr} 
+      .side-stats{flex-direction:row;gap:8px;justify-content:space-between;flex-wrap:wrap;}
+      .small{font-size:clamp(9px,1.2vw,11px)}
+      .controls{justify-content:center;}
+      .answer-row{flex-direction:column;width:100%;}
+      .answer{width:100%;max-width:200px;}
+    }
+    
+    @media (max-width:768px) and (min-width:481px){
+      body{display:block;padding:10px;}
+      .container{width:100%;max-width:100%;padding:18px;border-radius:14px;margin:0 auto;}
+      .problem{font-size:clamp(28px,4vw,40px);letter-spacing:2px;}
+      .side-stats{flex-direction:column;gap:12px;}
+      .stat-row{padding:8px;}
+      .modal-card{padding:18px;}
+      .header{flex-direction:column;align-items:flex-start;}
+      .title{min-width:100%;margin-bottom:12px;}
+    }
+    
+    @media (max-width:640px){
+      body{display:block;padding:8px;}
+      .container{width:100%;max-width:100%;padding:12px;border-radius:12px;margin:0 auto;}
+      .game-grid{grid-template-columns:1fr;gap:12px;}
+      .side-stats{flex-direction:column;gap:10px;}
+      .problem{font-size:clamp(24px,4.5vw,32px);letter-spacing:1px;}
+      .answer{font-size:clamp(16px,3vw,20px);width:100%;max-width:160px;}
+      .small{font-size:clamp(9px,1.5vw,10px)}
+      .modal{padding:12px;}
+      .modal-card{padding:clamp(12px,3vw,16px);}
+      .controls{flex-direction:column;gap:8px;}
+      button.primary, button.ghost{width:100%;max-width:200px;}
+    }
+    
+    @media (max-width:320px){
+      .container{padding:12px;border-radius:8px;}
+      .problem{font-size:24px;}
+      .answer{font-size:16px;padding:8px;}
+      .logo{width:36px;height:36px;font-size:14px;}
+      h1{font-size:14px;}
+      p.lead{font-size:11px;}
+    }
+
+    @media (hover: none) and (pointer: coarse){
+      button.primary, button.ghost{min-height:48px;min-width:48px;}
+      .answer{min-height:48px;font-size:18px;}
+      .edit-name-btn{min-height:32px;min-width:32px;}
+      .problem-area, .side-stats, button{user-select:none;-webkit-user-select:none;}
+      body{-webkit-overflow-scrolling:touch;}
+      button:focus, input:focus{outline:2px solid var(--accent);outline-offset:2px;}
+    }
+
+    @media (orientation: landscape) and (max-height:600px){
+      body{display:block;padding:8px;}
+      .container{max-height:95vh;overflow-y:auto;width:100%;max-width:1200px;margin:0 auto;}
+      .problem-area{min-height:120px;}
+      .modal{padding:10px;}
+      .modal-card{max-height:85vh;}
+      .game-grid{gap:12px;}
+      .problem{font-size:clamp(20px,3vw,28px);}
+    }
+
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi){
+      .logo, button{border:0.5px solid rgba(255,255,255,0.1);}
+    }
+
+    @media (prefers-color-scheme: light){}
+
+    @media (prefers-reduced-motion: reduce){
+      .lights::before, .lights::after{animation:none;}
+      .shake, .pulse{animation:none;}
+    }
+
+    .shake{animation:shake 420ms cubic-bezier(.36,.07,.19,.97)}@keyframes shake{0%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}100%{transform:translateX(0)}}
+    .pulse{animation:pulse 1s ease-in-out}@keyframes pulse{0%{opacity:1}50%{opacity:0.4;transform:scale(1.05)}100%{opacity:1;transform:scale(1)}}
+  </style>
+</head>
+<body>
+  <div class="lights" aria-hidden="true"></div>
+  <div class="connection-status connecting" id="connectionStatus">连接中...</div>
+  <canvas id="confettiCanvas"></canvas>
+  <div class="container" role="main">
+    <header>
+      <div class="title">
+        <div class="logo">算</div>
+        <div>
+          <h1>两位数心算 — 双人对战</h1>
+          <p class="lead">先建立房间并邀请对手，双方连线后任意一人开始游戏（1 分钟）。</p>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="small">双人实时对战 — 使用HTTP轮询</div>
+        <div class="small" id="serverStatus">检查服务器连接中...</div>
+        <button id="setServerBtn" class="ghost" style="margin-top:4px;padding:2px 6px;font-size:10px;">设置服务器</button>
+      </div>
+    </header>
+
+    <section class="game-grid">
+      <div class="card">
+        <div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <div class="small">房间 ID</div>
+            <div id="roomId" style="font-weight:700">-</div>
+          </div>
+          <div style="text-align:right">
+            <div class="small">我的玩家 ID</div>
+            <div id="playerId" style="font-weight:700">-</div>
+            <div class="small">我的名称</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div id="playerName" style="font-weight:700;flex:1">-</div>
+              <button id="editNameBtn" class="ghost" style="padding:4px 6px;font-size:10px;line-height:1">编辑</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <div class="small">在线用户数量</div>
+            <div id="onlineCount" style="font-weight:700; color: #22c55e;">0/2</div>
+          </div>
+          <div style="text-align:right">
+            <div class="small">对手</div>
+            <div id="opponentName" style="font-weight:700; color: #60a5fa;">等待加入...</div>
+          </div>
+        </div>
+
+        <div class="problem-area" id="playArea">
+          <div class="problem" id="problemText">等待匹配中…</div>
+          <div class="answer-row">
+            <input inputmode="numeric" pattern="[0-9]*" id="answerInput" class="answer" autocomplete="off" aria-label="输入答案" disabled />
+            <button id="submitBtn" class="primary" disabled>提交</button>
+            <button id="skipBtn" class="ghost" disabled>跳过</button>
+          </div>
+          <div class="small">当前题目编号：<span id="qIndex">0</span></div>
+        </div>
+      </div>
+
+      <aside class="card side-stats" aria-label="计时与统计">
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div>
+              <div class="small">剩余时间</div>
+              <div class="timer" aria-hidden="true" style="margin-top:8px;"><i id="timerBar" style="width:100%"></i></div>
+            </div>
+            <div style="text-align:right">
+              <div class="stat" id="timeText">60s</div>
+              <div class="small">倒计时</div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px" id="playersBox">
+            <div class="small">玩家列表（在线状态）</div>
+            <div id="playersList" style="margin-top:8px;display:flex;gap:8px;flex-direction:column"></div>
+          </div>
+
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <div class="stat-row" style="flex:1">
+              <div>
+                <div class="small">我的答对</div>
+                <div class="stat" id="myCorrect">0</div>
+              </div>
+              <div style="text-align:right;color:#b6fff7">✓</div>
+            </div>
+            <div class="stat-row" style="flex:1">
+              <div>
+                <div class="small">我的错误</div>
+                <div class="stat" id="myWrong">0</div>
+              </div>
+              <div style="text-align:right;color:#ffd6d6">✕</div>
+            </div>
+          </div>
+
+          <div class="stat-row" style="margin-top:12px">
+            <div>
+              <div class="small">我的正确率</div>
+              <div class="stat" id="myAcc">0%</div>
+            </div>
+            <div style="text-align:right">
+              <div class="small">已作答</div>
+              <div class="stat" id="myAttempted">0</div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button id="createRoomBtn" class="primary">创建房间</button>
+            <button id="joinRoomBtn" class="ghost">加入房间</button>
+            <button id="startBtn" class="primary" disabled>等待其他用户上线</button>
+            <button id="singlePlayerBtn" class="ghost">单人练习</button>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </div>
+
+  <div id="endModal" class="modal" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px">
+        <div style="font-size:22px;font-weight:800;color:var(--accent-2)">对战结束</div>
+      </div>
+      <div style="margin-top:14px;text-align:left">
+        <div class="small">用时：<span id="usedTime">60s</span></div>
+        <div style="margin-top:12px">
+          <div class="small">双方成绩</div>
+          <div id="resultsBox" style="margin-top:8px"></div>
+        </div>
+      </div>
+      <div class="restart">
+        <button id="restartBtn" class="primary">再来一局（保持房间）</button>
+        <button id="closeModal" class="ghost">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 用户名称编辑模态对话框 -->
+  <div id="nameEditModal" class="modal" style="display:none" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px">
+        <div style="font-size:22px;font-weight:800;color:var(--accent-2)">修改用户名称</div>
+      </div>
+      <div style="margin-top:20px">
+        <div class="small">输入新的用户名称：</div>
+        <input type="text" id="newNameInput" maxlength="12" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:var(--glass);color:#eaf6ff;font-size:16px;" placeholder="请输入用户名称" autocomplete="off" />
+        <div class="small" style="margin-top:4px;opacity:0.7">最多12个字符，中英文均可</div>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:8px;justify-content:center">
+        <button id="saveNameBtn" class="primary">保存</button>
+        <button id="cancelNameBtn" class="ghost">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HTTP轮询替代WebSocket -->
+  <script type="module">
+    // HTTP轮询替代WebSocket实现
+    
+    // --- HTTP API 管理 ---
+    let serverUrl = '';
+    let pollTimer = null;
+    let pingTimer = null;
+    let isConnected = false;
+    
+    // 简单 UUID
+    function uuid(len=8){return Math.random().toString(36).slice(2,2+len)}
+    
+    // 获取服务器URL
+    function getServerUrl() {
+      // 从当前页面URL推断服务器地址
+      const currentHost = window.location.hostname;
+      const currentPort = window.location.port || '80';
+      
+      // 如果是localhost或127.0.0.1，使用localhost
+      if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
+        return `http://localhost:${currentPort}`;
+      }
+      
+      // 如果是IP地址或域名，使用http://协议
+      return `http://${currentHost}:${currentPort}`;
+    }
+
+    // HTTP请求封装
+    async function httpRequest(url, options = {}) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+          },
+          ...options
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error('HTTP请求失败:', error);
+        throw error;
+      }
+    }
+
+    // API调用封装
+    const api = {
+      register: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/register`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      createRoom: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/create_room`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      joinRoom: async (playerId, roomId) => {
+        return await httpRequest(`${serverUrl}/api/join_room`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId, room_id: roomId })
+        });
+      },
+      
+      startGame: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/start_game`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      updateStats: async (playerId, correct, wrong, attempted) => {
+        return await httpRequest(`${serverUrl}/api/update_stats`, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            player_id: playerId, 
+            correct, 
+            wrong, 
+            attempted 
+          })
+        });
+      },
+      
+      updateName: async (playerId, name) => {
+        return await httpRequest(`${serverUrl}/api/update_name`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId, name })
+        });
+      },
+      
+      restartGame: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/restart_game`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      getRoomStatus: async (roomId) => {
+        return await httpRequest(`${serverUrl}/api/room/${roomId}`);
+      },
+      
+      ping: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/ping`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      }
+    };
+
+    // 初始化服务器连接
+    async function initConnection() {
+      serverUrl = getServerUrl();
+      updateConnectionStatus('connecting', '连接中...');
+      
+      try {
+        // 尝试注册玩家
+        const result = await api.register(playerId);
+        if (result.success) {
+          isConnected = true;
+          updateConnectionStatus('connected', '已连接');
+          document.getElementById('serverStatus').textContent = '✅ 服务器连接正常';
+          document.getElementById('serverStatus').style.color = '#22c55e';
+          
+          // 开始心跳
+          startPing();
+          
+          // 如果有房间ID，开始轮询
+          if (roomId && roomId !== 'local') {
+            startPolling();
+          }
+        } else {
+          throw new Error(result.error || '注册失败');
+        }
+      } catch (error) {
+        console.error('连接服务器失败:', error);
+        isConnected = false;
+        updateConnectionStatus('disconnected', '连接失败');
+        document.getElementById('serverStatus').textContent = '❌ 服务器连接失败';
+        document.getElementById('serverStatus').style.color = '#ef4444';
+        
+        // 3秒后重试
+        setTimeout(initConnection, 3000);
+      }
+    }
+
+    // 更新连接状态显示
+    function updateConnectionStatus(status, text) {
+      const statusEl = document.getElementById('connectionStatus');
+      statusEl.className = `connection-status ${status}`;
+      statusEl.textContent = text;
+    }
+
+    // 轮询房间状态
+    async function pollRoomStatus() {
+      if (!roomId || roomId === 'local' || !isConnected) return;
+      
+      try {
+        const result = await api.getRoomStatus(roomId);
+        if (result.success) {
+          handleRoomUpdate(result.data);
+        }
+      } catch (error) {
+        console.error('轮询房间状态失败:', error);
+        // 如果是网络错误，尝试重连
+        if (error.message.includes('Failed to fetch')) {
+          isConnected = false;
+          updateConnectionStatus('disconnected', '连接断开');
+          initConnection();
+        }
+      }
+    }
+
+    // 开始轮询
+    function startPolling() {
+      stopPolling();
+      pollTimer = setInterval(pollRoomStatus, 2000); // 每2秒轮询一次
+    }
+
+    // 停止轮询
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    // 心跳
+    async function startPing() {
+      stopPing();
+      pingTimer = setInterval(async () => {
+        if (isConnected) {
+          try {
+            await api.ping(playerId);
+          } catch (error) {
+            console.error('心跳失败:', error);
+            isConnected = false;
+            updateConnectionStatus('disconnected', '连接断开');
+            initConnection();
+          }
+        }
+      }, 10000); // 每10秒心跳一次
+    }
+
+    function stopPing() {
+      if (pingTimer) {
+        clearInterval(pingTimer);
+        pingTimer = null;
+      }
+    }
+
+    // 处理房间更新
+    function handleRoomUpdate(data) {
+      const room = data.room;
+      const players = data.players;
+      
+      // 更新题目列表
+      if (room.problems && room.problems.length > 0) {
+        problems = room.problems;
+      }
+      
+      // 处理游戏状态变化
+      if (room.state === 'running' && room.start_ts && !running) {
+        startTs = room.start_ts * 1000; // 转换为毫秒
+        beginLocalRun();
+      }
+      
+      if (room.state === 'finished') {
+        showResults(players);
+      }
+      
+      // 同步更新自己的用户名称
+      const currentPlayer = players.find(p => p.id === playerId);
+      if (currentPlayer && currentPlayer.name !== playerName) {
+        console.log(`用户名称已同步更新: ${playerName} -> ${currentPlayer.name}`);
+        playerName = currentPlayer.name;
+        playerNameEl.textContent = playerName;
+      }
+      
+      // 更新在线用户数量和对手名称
+      const onlineCount = players.filter(p => p.online).length;
+      onlineCountEl.textContent = `${onlineCount}/2`;
+      
+      // 找到对手
+      const onlinePlayers = players.filter(p => p.online && p.id !== playerId);
+      if (onlinePlayers.length > 0) {
+        const opponent = onlinePlayers[0];
+        const previousOpponentName = opponentNameEl.textContent;
+        
+        if (previousOpponentName !== opponent.name) {
+          console.log(`对手名称已更新: ${previousOpponentName} -> ${opponent.name}`);
+          opponentNameEl.textContent = opponent.name;
+          opponentNameEl.style.color = '#60a5fa';
+          
+          if (previousOpponentName !== '等待加入...') {
+            opponentNameEl.style.animation = 'pulse 1s';
+            setTimeout(() => {
+              opponentNameEl.style.animation = '';
+            }, 1000);
+          }
+        }
+      } else {
+        opponentNameEl.textContent = '等待加入...';
+        opponentNameEl.style.color = '#94a3b8';
+      }
+      
+      // 更新玩家列表
+      renderPlayers(players);
+      
+      if (!singlePlayerMode) {
+        if (onlineCount >= 2) {
+          startBtn.disabled = false;
+          startBtn.textContent = '开始游戏';
+          if (running) {
+            enableAnswerInputs(true);
+          }
+        } else {
+          startBtn.disabled = true;
+          startBtn.textContent = `等待其他用户上线 (${onlineCount}/2)`;
+          enableAnswerInputs(false);
+        }
+      }
+    }
+
+    // 连接到自定义服务器
+    function connectToCustomServer(serverAddress) {
+      const newUrl = 'http://' + serverAddress;
+      console.log('尝试连接到自定义服务器:', newUrl);
+      
+      serverUrl = newUrl;
+      updateConnectionStatus('connecting', '连接中...');
+      initConnection();
+    }
+
+    // UI refs
+    const roomIdEl = document.getElementById('roomId');
+    const playerIdEl = document.getElementById('playerId');
+    const playerNameEl = document.getElementById('playerName');
+    const editNameBtn = document.getElementById('editNameBtn');
+    const setServerBtn = document.getElementById('setServerBtn');
+    const onlineCountEl = document.getElementById('onlineCount');
+    const opponentNameEl = document.getElementById('opponentName');
+    
+    // 名称编辑模态对话框元素
+    const nameEditModal = document.getElementById('nameEditModal');
+    const newNameInput = document.getElementById('newNameInput');
+    const saveNameBtn = document.getElementById('saveNameBtn');
+    const cancelNameBtn = document.getElementById('cancelNameBtn');
+    const createRoomBtn = document.getElementById('createRoomBtn');
+    const joinRoomBtn = document.getElementById('joinRoomBtn');
+    const startBtn = document.getElementById('startBtn');
+    const problemText = document.getElementById('problemText');
+    const answerInput = document.getElementById('answerInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const skipBtn = document.getElementById('skipBtn');
+    const timerBar = document.getElementById('timerBar');
+    const timeText = document.getElementById('timeText');
+
+    const playersList = document.getElementById('playersList');
+    const myCorrectEl = document.getElementById('myCorrect');
+    const myWrongEl = document.getElementById('myWrong');
+    const myAccEl = document.getElementById('myAcc');
+    const myAttemptedEl = document.getElementById('myAttempted');
+
+    const qIndexEl = document.getElementById('qIndex');
+    const endModal = document.getElementById('endModal');
+    const resultsBox = document.getElementById('resultsBox');
+    const usedTime = document.getElementById('usedTime');
+    const restartBtn = document.getElementById('restartBtn');
+    const closeModal = document.getElementById('closeModal');
+    const singlePlayerBtn = document.getElementById('singlePlayerBtn');
+
+    // audio
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ringAudio = new Audio('ring.flac');
+    
+    function playChime(){
+      ringAudio.currentTime = 0;
+      ringAudio.play().catch(error => {
+        console.error('播放ring.flac失败:', error);
+      });
+    }
+    function playBuzzer(){
+      const t = audioCtx.currentTime;
+      const o = audioCtx.createOscillator(); o.type='square'; o.frequency.setValueAtTime(220,t);
+      const g = audioCtx.createGain(); g.gain.setValueAtTime(0.2,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.4);
+      o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(t+0.45);
+    }
+
+    // confetti
+    const confettiCanvas = document.getElementById('confettiCanvas');
+    const ctx2 = confettiCanvas.getContext('2d'); let confettiPieces=[];
+    function resizeCanvas(){ confettiCanvas.width = innerWidth; confettiCanvas.height = innerHeight; }
+    window.addEventListener('resize', resizeCanvas); resizeCanvas();
+    function spawnConfetti(x,y){ for(let i=0;i<30;i++){ confettiPieces.push({ x: x||innerWidth/2, y: y||innerHeight/2, vx: (Math.random()-0.5)*6, vy: (Math.random()*-6)-2, size: 6+Math.random()*8, rot: Math.random()*360, vr: (Math.random()-0.5)*10, color: `hsl(${Math.floor(Math.random()*50+180)},80%,60%)`, life: 60+Math.random()*60 }); } }
+    function updateConfetti(){ ctx2.clearRect(0,0,confettiCanvas.width,confettiCanvas.height); for(let i=confettiPieces.length-1;i>=0;i--){ const p = confettiPieces[i]; p.vy += 0.25; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life--; ctx2.save(); ctx2.translate(p.x,p.y); ctx2.rotate(p.rot*Math.PI/180); ctx2.fillStyle = p.color; ctx2.fillRect(-p.size/2, -p.size/2, p.size, p.size*0.6); ctx2.restore(); if(p.y>innerHeight+50||p.x<-50||p.x>innerWidth+50||p.life<0) confettiPieces.splice(i,1); } requestAnimationFrame(updateConfetti); }
+    requestAnimationFrame(updateConfetti);
+
+    // game constants
+    const DURATION = 60; // seconds
+    const problemCount = 200; // pool size
+
+    // runtime state
+    let roomId = null;
+    let playerId = uuid(6);
+    let playerName = 'P' + playerId;
+    let currentProblemIndex = 0;
+    let problems = [];
+    let myCorrect = 0, myWrong = 0, myAttempted = 0;
+    let running = false;
+    let startTs = null;
+    let localTimer = null;
+    let singlePlayerMode = false;
+
+    // UI helpers
+    function setRoomIdText(id){ roomIdEl.textContent = id; }
+    function setPlayerIdText(){ 
+      playerIdEl.textContent = playerId; 
+      playerNameEl.textContent = playerName; 
+    }
+
+    // create room
+    createRoomBtn.addEventListener('click', async ()=>{
+      if (!isConnected) {
+        alert('服务器连接不可用，请检查服务器是否运行');
+        return;
+      }
+      
+      try {
+        const result = await api.createRoom(playerId);
+        if (result.success) {
+          roomId = result.room_id;
+          setRoomIdText(roomId);
+          const shareUrl = location.href.split('#')[0] + '#room=' + roomId;
+          alert(`房间已创建\n分享链接给对手：\n${shareUrl}`);
+          startPolling();
+        } else {
+          alert('创建房间失败: ' + (result.error || '未知错误'));
+        }
+      } catch (error) {
+        console.error('创建房间失败:', error);
+        alert('创建房间失败: ' + error.message);
+      }
+    });
+
+    // join room
+    joinRoomBtn.addEventListener('click', async ()=>{
+      if (!isConnected) {
+        alert('服务器连接不可用，请检查服务器是否运行');
+        return;
+      }
+      
+      const id = prompt('输入房间 ID 或粘贴链接：'); 
+      if(!id) return;
+      const match = id.match(/room=(\d+)/i);
+      const roomIdToJoin = match? match[1] : id.trim();
+      
+      try {
+        const result = await api.joinRoom(playerId, roomIdToJoin);
+        if (result.success) {
+          roomId = roomIdToJoin;
+          setRoomIdText(roomId);
+          console.log('成功加入房间:', roomId);
+          startPolling();
+        } else {
+          alert('加入房间失败: ' + (result.error || '房间不存在'));
+        }
+      } catch (error) {
+        console.error('加入房间失败:', error);
+        alert('加入房间失败: ' + error.message);
+      }
+    });
+
+    // auto-join if URL contains room
+    (()=>{
+      const h = location.hash;
+      const m = h.match(/room=(\d+)/i);
+      if(m){ 
+        roomId = m[1]; 
+        // 连接成功后会自动加入房间
+      }
+    })();
+
+    function renderPlayers(list){
+      playersList.innerHTML = '';
+      list.forEach(p=>{
+        const el = document.createElement('div');
+        el.style.display = 'flex'; el.style.justifyContent = 'space-between'; el.style.alignItems = 'center'; el.style.padding = '6px 8px'; el.style.borderRadius = '8px';
+        el.style.background = 'linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005))';
+        el.innerHTML = `
+          <div>
+            <strong>${p.name}</strong>
+            <div class="small">ID:${p.id}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="small">${p.online?'<span style="color:#a6ffd1">在线</span>':'<span style="color:#ff9b9b">离线</span>'}</div>
+            <div class="small">${p.correct||0} / ${p.attempted||0}</div>
+          </div>
+        `;
+        playersList.appendChild(el);
+      });
+    }
+
+    // start game
+    startBtn.addEventListener('click', async ()=>{
+      console.log('开始游戏按钮被点击');
+      if (singlePlayerMode) {
+        startLocalSinglePlayer();
+        return;
+      }
+      if (!isConnected) {
+        alert('服务器连接不可用，请检查服务器是否运行');
+        return;
+      }
+      
+      try {
+        const result = await api.startGame(playerId);
+        if (!result.success) {
+          alert('开始游戏失败: ' + (result.error || '请确保有足够的玩家'));
+        }
+      } catch (error) {
+        console.error('开始游戏失败:', error);
+        alert('开始游戏失败: ' + error.message);
+      }
+    });
+
+    // generate problems list
+    function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+    function generateProblems(n){ const arr = []; for(let i=0;i<n;i++){ const op = Math.random()<0.5?'+':'-'; let a = randInt(10,99); let b = randInt(10,99); if(op==='-' && a<b) [a,b] = [b,a]; arr.push({ a,b,op,answer: op==='+'? a+b : a-b }); } return arr; }
+
+    // begin local run after room indicates running
+    async function beginLocalRun(){
+      console.log('开始本地游戏运行');
+      if(problems.length === 0) {
+        problems = generateProblems(problemCount);
+      }
+      currentProblemIndex = 0; 
+      myCorrect = 0; 
+      myWrong = 0; 
+      myAttempted = 0; 
+      updateMyStats(); 
+      running = true;
+      startTs = startTs || Date.now();
+      console.log('游戏开始，题目数量:', problems.length);
+      enableAnswerInputs(true); 
+      answerInput.focus();
+      if(localTimer) clearInterval(localTimer);
+      localTimer = setInterval(()=>{
+        const elapsed = Math.floor((Date.now() - startTs)/1000);
+        const remaining = Math.max(0, DURATION - elapsed);
+        timeText.textContent = remaining + 's';
+        const pct = Math.max(0, (remaining/DURATION)*100);
+        timerBar.style.width = pct + '%';
+        if(remaining <= 0){ 
+          clearInterval(localTimer); 
+          finishRun(); 
+        }
+      },200);
+      showProblem();
+    }
+
+    function showProblem(){ if(currentProblemIndex >= problems.length) currentProblemIndex = 0; const p = problems[currentProblemIndex]; problemText.textContent = `${p.a} ${p.op} ${p.b} = ?`; qIndexEl.textContent = currentProblemIndex+1; }
+
+    function enableAnswerInputs(flag){ 
+      if (singlePlayerMode && !flag) {
+        console.log('Ignoring enableAnswerInputs(false) in single player mode');
+        return;
+      }
+      
+      answerInput.disabled = !flag; 
+      submitBtn.disabled = !flag; 
+      skipBtn.disabled = !flag;
+      console.log('Answer inputs enabled:', flag, 'singlePlayerMode:', singlePlayerMode);
+      if (flag) {
+        answerInput.style.border = '2px solid #22c55e';
+        answerInput.focus();
+      } else {
+        answerInput.style.border = '';
+      }
+    }
+
+    submitBtn.addEventListener('click', submitLocalAnswer);
+    answerInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') submitLocalAnswer(); });
+    skipBtn.addEventListener('click', ()=>{ if(!running) return; myWrong++; myAttempted++; currentProblemIndex++; updateMyStats(); showProblem(); });
+
+    async function submitLocalAnswer(){
+      if(!running) return;
+      const val = answerInput.value.trim(); if(val==='') return;
+      const num = Number(val); if(Number.isNaN(num)) return;
+      myAttempted++; const p = problems[currentProblemIndex];
+      if(num === p.answer){ myCorrect++; playChime(); spawnConfetti(); }
+      else { myWrong++; playBuzzer(); }
+      
+      // 发送统计数据到服务器
+      if (!singlePlayerMode && isConnected) {
+        try {
+          await api.updateStats(playerId, myCorrect, myWrong, myAttempted);
+        } catch (error) {
+          console.error('更新统计失败:', error);
+        }
+      }
+      
+      updateMyStats(); currentProblemIndex++; showProblem(); answerInput.value=''; answerInput.focus();
+    }
+
+    function updateMyStats(){ myCorrectEl.textContent = myCorrect; myWrongEl.textContent = myWrong; myAttemptedEl.textContent = myAttempted; const acc = myAttempted? Math.round((myCorrect/myAttempted)*100) : 0; myAccEl.textContent = acc + '%'; }
+
+    // finish run
+    async function finishRun(){
+      running = false; enableAnswerInputs(false);
+      
+      // 发送最终统计数据到服务器
+      if (!singlePlayerMode && isConnected) {
+        try {
+          await api.updateStats(playerId, myCorrect, myWrong, myAttempted);
+        } catch (error) {
+          console.error('更新最终统计失败:', error);
+        }
+      }
+    }
+
+    // show results
+    function showResults(players = null){
+      if (players) {
+        resultsBox.innerHTML = '';
+        players.forEach(p=>{
+          const acc = p.attempted? Math.round((p.correct/p.attempted)*100) : 0;
+          const div = document.createElement('div'); div.style.padding='8px 0'; div.innerHTML = `<strong>${p.name}</strong> — 答对 ${p.correct||0}，错误 ${p.wrong||0}，正确率 ${acc}%`;
+          resultsBox.appendChild(div);
+        });
+      }
+      usedTime.textContent = DURATION + 's'; endModal.style.display = 'flex';
+    }
+
+    restartBtn.addEventListener('click', async ()=>{
+      if (!isConnected) {
+        alert('服务器连接不可用，请检查服务器是否运行');
+        return;
+      }
+      
+      try {
+        const result = await api.restartGame(playerId);
+        if (!result.success) {
+          alert('重新开始失败: ' + (result.error || '未知错误'));
+        }
+      } catch (error) {
+        console.error('重新开始失败:', error);
+        alert('重新开始失败: ' + error.message);
+      }
+    });
+    closeModal.addEventListener('click', ()=>{ endModal.style.display = 'none'; });
+
+    // single player mode
+    singlePlayerBtn.addEventListener('click', () => {
+      console.log('Single player button clicked');
+      singlePlayerMode = true;
+      roomId = 'local';
+      setRoomIdText('本地练习');
+      setPlayerIdText();
+      
+      // 更新在线用户数量和对手显示
+      onlineCountEl.textContent = '1/1';
+      opponentNameEl.textContent = '单人练习';
+      opponentNameEl.style.color = '#22c55e';
+      
+      // 生成题目
+      problems = generateProblems(problemCount);
+      currentProblemIndex = 0;
+      myCorrect = 0;
+      myWrong = 0;
+      myAttempted = 0;
+      updateMyStats();
+      
+      console.log('Problems generated:', problems.length);
+      
+      // 开始游戏
+      beginSinglePlayerGame();
+    });
+
+    function beginSinglePlayerGame() {
+      console.log('beginSinglePlayerGame called');
+      running = false;
+      startTs = Date.now();
+      problemText.textContent = '点击开始单人练习';
+      startBtn.textContent = '开始练习';
+      startBtn.disabled = false;
+    }
+
+    function startLocalSinglePlayer() {
+      running = true;
+      startTs = Date.now();
+      enableAnswerInputs(true);
+      answerInput.focus();
+      startBtn.disabled = true;
+      startBtn.textContent = '练习进行中...';
+      
+      if(localTimer) clearInterval(localTimer);
+      localTimer = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTs)/1000);
+        const remaining = Math.max(0, DURATION - elapsed);
+        timeText.textContent = remaining + 's';
+        const pct = Math.max(0, (remaining/DURATION)*100);
+        timerBar.style.width = pct + '%';
+        if(remaining <= 0) { 
+          clearInterval(localTimer); 
+          finishSinglePlayerGame(); 
+        }
+      }, 200);
+      showProblem();
+    }
+
+    function finishSinglePlayerGame() {
+      running = false;
+      enableAnswerInputs(false);
+      
+      // 显示结果
+      const acc = myAttempted ? Math.round((myCorrect/myAttempted)*100) : 0;
+      resultsBox.innerHTML = `
+        <div style="padding: 12px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border-radius: 8px; margin: 8px 0;">
+          <div style="font-size: 18px; font-weight: 700; color: var(--accent);">
+            单人练习成绩
+          </div>
+          <div style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <div>答对: <span style="color: #22c55e; font-weight: 700;">${myCorrect}</span></div>
+            <div>答错: <span style="color: #ef4444; font-weight: 700;">${myWrong}</span></div>
+            <div>正确率: <span style="color: var(--accent-2); font-weight: 700;">${acc}%</span></div>
+            <div>总题数: <span style="font-weight: 700;">${myAttempted}</span></div>
+          </div>
+        </div>
+      `;
+      usedTime.textContent = Math.floor((Date.now() - startTs)/1000) + 's';
+      endModal.style.display = 'flex';
+    }
+
+    // 名称编辑功能
+    editNameBtn.addEventListener('click', () => {
+      newNameInput.value = playerName;
+      nameEditModal.style.display = 'flex';
+      newNameInput.focus();
+      newNameInput.select();
+    });
+
+    // 保存新名称
+    saveNameBtn.addEventListener('click', savePlayerName);
+    newNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        savePlayerName();
+      } else if (e.key === 'Escape') {
+        cancelNameEdit();
+      }
+    });
+
+    // 取消编辑
+    cancelNameBtn.addEventListener('click', cancelNameEdit);
+    nameEditModal.addEventListener('click', (e) => {
+      if (e.target === nameEditModal) {
+        cancelNameEdit();
+      }
+    });
+
+    async function savePlayerName() {
+      const newName = newNameInput.value.trim();
+      if (!newName) {
+        alert('用户名称不能为空');
+        return;
+      }
+      if (newName.length > 12) {
+        alert('用户名称不能超过12个字符');
+        return;
+      }
+      
+      const oldName = playerName;
+      
+      // 更新本地显示
+      playerName = newName;
+      playerNameEl.textContent = playerName;
+      console.log(`用户名称已修改: ${oldName} -> ${newName}`);
+      
+      // 发送到服务器
+      if (!singlePlayerMode && isConnected) {
+        try {
+          const result = await api.updateName(playerId, playerName);
+          if (!result.success) {
+            console.error('名称更新失败:', result.error);
+            alert('名称更新失败: ' + (result.error || '未知错误'));
+          }
+        } catch (error) {
+          console.error('名称更新失败:', error);
+          alert('名称更新失败: ' + error.message);
+        }
+      } else {
+        console.log('单人练习模式或服务器连接断开，仅本地更新名称');
+      }
+      
+      // 关闭模态对话框
+      nameEditModal.style.display = 'none';
+    }
+
+    function cancelNameEdit() {
+      nameEditModal.style.display = 'none';
+    }
+
+    // 设置服务器按钮事件
+    setServerBtn.addEventListener('click', () => {
+      const currentServer = serverUrl.replace('http://', '');
+      const message = `请输入游戏服务器地址（格式：IP地址:端口，例如：192.168.1.100:8000）：
+      
+当前连接地址：${currentServer}
+
+常见地址：
+• 本地：localhost:8000
+• 本机IP：${window.location.hostname}:8000
+• 如果在同一WiFi网络，请使用服务器的IP地址`;
+      
+      const newServer = prompt(message, currentServer);
+      if (newServer && newServer !== currentServer) {
+        connectToCustomServer(newServer);
+      }
+    });
+
+    // 初始化
+    setPlayerIdText(); 
+    setRoomIdText('-'); 
+    timeText.textContent = DURATION + 's'; 
+    timerBar.style.width = '100%';
+    
+    // 启动连接
+    initConnection();
+
+  </script>
+</body>
+</html>
