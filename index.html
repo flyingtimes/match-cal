@@ -781,8 +781,33 @@
         return;
       }
       
+      const oldName = gameState.playerName;
       gameState.playerName = newName;
       playerNameEl.textContent = newName;
+      
+      console.log('玩家修改名称:', {
+        oldName,
+        newName,
+        roomId: gameState.roomId,
+        mode: gameState.mode
+      });
+      
+      // 如果在对战模式下，更新房间数据中的名称
+      if (gameState.mode === 'battle' && gameState.roomId && rooms[gameState.roomId]) {
+        if (rooms[gameState.roomId].host === oldName) {
+          rooms[gameState.roomId].host = newName;
+        } else if (rooms[gameState.roomId].guest === oldName) {
+          rooms[gameState.roomId].guest = newName;
+        }
+        saveRooms();
+        
+        console.log('更新房间中的玩家名称:', {
+          roomId: gameState.roomId,
+          host: rooms[gameState.roomId].host,
+          guest: rooms[gameState.roomId].guest
+        });
+      }
+      
       nameEditModal.style.display = 'none';
     });
 
@@ -823,8 +848,19 @@
           if (room.host === gameState.playerName) {
             // 房主的逻辑
             if (room.guest) {
-              gameState.opponentName = room.guest;
-              opponentNameEl.textContent = gameState.opponentName;
+              // 检查对手名称是否已更改
+              const currentOpponentName = gameState.opponentName;
+              const newOpponentName = room.guest;
+              
+              if (currentOpponentName !== newOpponentName) {
+                gameState.opponentName = newOpponentName;
+                opponentNameEl.textContent = newOpponentName;
+                console.log('房主检测到对手名称变更:', {
+                  oldName: currentOpponentName,
+                  newName: newOpponentName
+                });
+              }
+              
               if (room.status === 'waiting' && startBtn.style.display === 'none') {
                 problemText.textContent = '好友已加入，可以开始游戏了！';
                 startBtn.style.display = 'block';
@@ -834,8 +870,18 @@
             }
           } else if (room.guest === gameState.playerName) {
             // 客人的逻辑
-            gameState.opponentName = room.host;
-            opponentNameEl.textContent = gameState.opponentName;
+            const currentOpponentName = gameState.opponentName;
+            const newOpponentName = room.host;
+            
+            // 检查对手名称是否已更改
+            if (currentOpponentName !== newOpponentName) {
+              gameState.opponentName = newOpponentName;
+              opponentNameEl.textContent = newOpponentName;
+              console.log('客人检测到对手名称变更:', {
+                oldName: currentOpponentName,
+                newName: newOpponentName
+              });
+            }
             
             // 如果房主已经开始游戏，而自己还没开始，则自动开始
             if (room.status === 'playing' && !gameState.running) {
