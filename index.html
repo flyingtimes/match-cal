@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>两位数心算 — 双人对战（本地服务器）</title>
+  <title>两位数心算 — 双人对战（HTTP轮询版）</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;600;700&display=swap" rel="stylesheet">
@@ -15,7 +15,36 @@
     .side-stats{display:flex;flex-direction:column;gap:clamp(8px,2vw,16px)}.timer{height:clamp(14px,2vh,20px);background:rgba(255,255,255,0.04);border-radius:10px;overflow:hidden}.timer > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:100%;transform-origin:left}.stat-row{display:flex;align-items:center;justify-content:space-between;padding:clamp(8px,2vw,12px);border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));flex-wrap:wrap;gap:8px;}.stat{font-size:clamp(16px,3vw,20px);font-weight:700}.small{font-size:clamp(10px,1.5vw,12px);color:rgba(230,240,255,0.7);line-height:1.3;}.controls{display:flex;gap:clamp(6px,1.5vw,12px);margin-top:clamp(6px,1.5vw,12px);flex-wrap:wrap;}
     #confettiCanvas{position:absolute;inset:0;pointer-events:none;z-index:3}
     .modal{position:fixed;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(2,6,23,0.6), rgba(2,6,23,0.6));z-index:10;padding:20px;}.modal-card{width:min(560px,92vw);padding:clamp(16px,4vw,24px);border-radius:14px;background:linear-gradient(180deg,#062031, #021124);box-shadow:0 18px 60px rgba(2,6,23,0.7);text-align:center;max-height:90vh;overflow-y:auto;}.big-num{font-size:clamp(32px,6vw,48px);font-weight:800}.restart{margin-top:clamp(12px,2vw,20px)}
-    /* iPad and tablet devices (768px - 1024px) */
+    
+    /* 添加连接状态指示器 */
+    .connection-status {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 1000;
+      transition: all 0.3s ease;
+    }
+    .connection-status.connected {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+    .connection-status.disconnected {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .connection-status.connecting {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.3);
+    }
+
+    /* 响应式设计保持不变 */
     @media (max-width:1024px) and (min-width:769px){
       .container{width:min(1000px,94vw);padding:20px;}
       .game-grid{grid-template-columns:1fr min(280px,28vw);gap:16px;}
@@ -25,7 +54,6 @@
       .controls{gap:10px;}
     }
     
-    /* Small tablets and large phones (600px - 768px) */
     @media (max-width:860px){
       .game-grid{grid-template-columns:1fr} 
       .side-stats{flex-direction:row;gap:8px;justify-content:space-between;flex-wrap:wrap;}
@@ -35,19 +63,9 @@
       .answer{width:100%;max-width:200px;}
     }
     
-    /* Medium phones (480px - 600px) */
     @media (max-width:768px) and (min-width:481px){
-      body{
-        display:block;
-        padding:10px;
-      }
-      .container{
-        width:100%;
-        max-width:100%;
-        padding:18px;
-        border-radius:14px;
-        margin:0 auto;
-      }
+      body{display:block;padding:10px;}
+      .container{width:100%;max-width:100%;padding:18px;border-radius:14px;margin:0 auto;}
       .problem{font-size:clamp(28px,4vw,40px);letter-spacing:2px;}
       .side-stats{flex-direction:column;gap:12px;}
       .stat-row{padding:8px;}
@@ -56,19 +74,9 @@
       .title{min-width:100%;margin-bottom:12px;}
     }
     
-    /* Small phones (320px - 480px) */
     @media (max-width:640px){
-      body{
-        display:block;
-        padding:8px;
-      }
-      .container{
-        width:100%;
-        max-width:100%;
-        padding:12px;
-        border-radius:12px;
-        margin:0 auto;
-      }
+      body{display:block;padding:8px;}
+      .container{width:100%;max-width:100%;padding:12px;border-radius:12px;margin:0 auto;}
       .game-grid{grid-template-columns:1fr;gap:12px;}
       .side-stats{flex-direction:column;gap:10px;}
       .problem{font-size:clamp(24px,4.5vw,32px);letter-spacing:1px;}
@@ -80,7 +88,6 @@
       button.primary, button.ghost{width:100%;max-width:200px;}
     }
     
-    /* Very small phones (below 320px) */
     @media (max-width:320px){
       .container{padding:12px;border-radius:8px;}
       .problem{font-size:24px;}
@@ -90,36 +97,18 @@
       p.lead{font-size:11px;}
     }
 
-    /* Mobile touch optimizations */
     @media (hover: none) and (pointer: coarse){
-      /* Increase touch targets for mobile devices */
       button.primary, button.ghost{min-height:48px;min-width:48px;}
       .answer{min-height:48px;font-size:18px;}
       .edit-name-btn{min-height:32px;min-width:32px;}
-      
-      /* Prevent text selection on game elements */
       .problem-area, .side-stats, button{user-select:none;-webkit-user-select:none;}
-      
-      /* Optimize scrolling for touch */
       body{-webkit-overflow-scrolling:touch;}
-      
-      /* Better focus styles for keyboard navigation */
       button:focus, input:focus{outline:2px solid var(--accent);outline-offset:2px;}
     }
 
-    /* Landscape mode optimizations */
     @media (orientation: landscape) and (max-height:600px){
-      body{
-        display:block;
-        padding:8px;
-      }
-      .container{
-        max-height:95vh;
-        overflow-y:auto;
-        width:100%;
-        max-width:1200px;
-        margin:0 auto;
-      }
+      body{display:block;padding:8px;}
+      .container{max-height:95vh;overflow-y:auto;width:100%;max-width:1200px;margin:0 auto;}
       .problem-area{min-height:120px;}
       .modal{padding:10px;}
       .modal-card{max-height:85vh;}
@@ -127,17 +116,12 @@
       .problem{font-size:clamp(20px,3vw,28px);}
     }
 
-    /* High DPI displays */
     @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi){
       .logo, button{border:0.5px solid rgba(255,255,255,0.1);}
     }
 
-    /* Dark mode support (though already dark by default) */
-    @media (prefers-color-scheme: light){
-      /* Keep dark theme as it's better for math games */
-    }
+    @media (prefers-color-scheme: light){}
 
-    /* Reduced motion support */
     @media (prefers-reduced-motion: reduce){
       .lights::before, .lights::after{animation:none;}
       .shake, .pulse{animation:none;}
@@ -149,6 +133,7 @@
 </head>
 <body>
   <div class="lights" aria-hidden="true"></div>
+  <div class="connection-status connecting" id="connectionStatus">连接中...</div>
   <canvas id="confettiCanvas"></canvas>
   <div class="container" role="main">
     <header>
@@ -160,7 +145,7 @@
         </div>
       </div>
       <div style="text-align:right">
-        <div class="small">双人实时对战 — 使用本地Python服务器</div>
+        <div class="small">双人实时对战 — 使用HTTP轮询</div>
         <div class="small" id="serverStatus">检查服务器连接中...</div>
         <button id="setServerBtn" class="ghost" style="margin-top:4px;padding:2px 6px;font-size:10px;">设置服务器</button>
       </div>
@@ -300,232 +285,226 @@
     </div>
   </div>
 
-  <!-- 本地WebSocket服务器连接 -->
+  <!-- HTTP轮询替代WebSocket -->
   <script type="module">
-    // 本地WebSocket服务器替代Firebase
-    // 服务器运行在 ws://localhost:8765
-
-    // --- WebSocket 连接管理 ---
-    let ws = null;
-    let reconnectTimer = null;
-    let heartbeatTimer = null;
+    // HTTP轮询替代WebSocket实现
+    
+    // --- HTTP API 管理 ---
+    let serverUrl = '';
+    let pollTimer = null;
+    let pingTimer = null;
+    let isConnected = false;
     
     // 简单 UUID
     function uuid(len=8){return Math.random().toString(36).slice(2,2+len)}
     
-    // 获取WebSocket服务器URL
-    function getWebSocketUrl() {
-      // 从当前页面URL推断WebSocket服务器地址
+    // 获取服务器URL
+    function getServerUrl() {
+      // 从当前页面URL推断服务器地址
       const currentHost = window.location.hostname;
-      const wsPort = '8765'; // WebSocket端口
+      const currentPort = window.location.port || '80';
       
       // 如果是localhost或127.0.0.1，使用localhost
       if (currentHost === 'localhost' || currentHost === '127.0.0.1') {
-        return `ws://localhost:${wsPort}`;
+        return `http://localhost:${currentPort}`;
       }
       
-      // 如果是IP地址或域名，使用ws://协议
-      return `ws://${currentHost}:${wsPort}`;
+      // 如果是IP地址或域名，使用http://协议
+      return `http://${currentHost}:${currentPort}`;
     }
 
-    // 连接WebSocket服务器
-    function connectWebSocket() {
-      const wsUrl = getWebSocketUrl();
-      console.log('尝试连接WebSocket服务器:', wsUrl);
+    // HTTP请求封装
+    async function httpRequest(url, options = {}) {
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers
+          },
+          ...options
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error('HTTP请求失败:', error);
+        throw error;
+      }
+    }
+
+    // API调用封装
+    const api = {
+      register: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/register`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      createRoom: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/create_room`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      joinRoom: async (playerId, roomId) => {
+        return await httpRequest(`${serverUrl}/api/join_room`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId, room_id: roomId })
+        });
+      },
+      
+      startGame: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/start_game`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      updateStats: async (playerId, correct, wrong, attempted) => {
+        return await httpRequest(`${serverUrl}/api/update_stats`, {
+          method: 'POST',
+          body: JSON.stringify({ 
+            player_id: playerId, 
+            correct, 
+            wrong, 
+            attempted 
+          })
+        });
+      },
+      
+      updateName: async (playerId, name) => {
+        return await httpRequest(`${serverUrl}/api/update_name`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId, name })
+        });
+      },
+      
+      restartGame: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/restart_game`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      },
+      
+      getRoomStatus: async (roomId) => {
+        return await httpRequest(`${serverUrl}/api/room/${roomId}`);
+      },
+      
+      ping: async (playerId) => {
+        return await httpRequest(`${serverUrl}/api/ping`, {
+          method: 'POST',
+          body: JSON.stringify({ player_id: playerId })
+        });
+      }
+    };
+
+    // 初始化服务器连接
+    async function initConnection() {
+      serverUrl = getServerUrl();
+      updateConnectionStatus('connecting', '连接中...');
       
       try {
-        ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => {
-          console.log('WebSocket连接成功');
+        // 尝试注册玩家
+        const result = await api.register(playerId);
+        if (result.success) {
+          isConnected = true;
+          updateConnectionStatus('connected', '已连接');
           document.getElementById('serverStatus').textContent = '✅ 服务器连接正常';
           document.getElementById('serverStatus').style.color = '#22c55e';
           
-          // 注册玩家
-          ws.send(JSON.stringify({
-            type: 'register',
-            player_id: playerId
-          }));
-          
           // 开始心跳
-          startHeartbeat();
+          startPing();
           
-          // 如果有房间ID，重新加入
+          // 如果有房间ID，开始轮询
           if (roomId && roomId !== 'local') {
-            ws.send(JSON.stringify({
-              type: 'join_room',
-              room_id: roomId
-            }));
+            startPolling();
           }
-        };
-        
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            handleServerMessage(data);
-          } catch (error) {
-            console.error('解析服务器消息失败:', error);
-          }
-        };
-        
-        ws.onclose = () => {
-          console.log('WebSocket连接关闭');
-          document.getElementById('serverStatus').textContent = '❌ 服务器连接断开';
-          document.getElementById('serverStatus').style.color = '#ef4444';
-          
-          // 停止心跳
-          stopHeartbeat();
-          
-          // 自动重连
-          scheduleReconnect();
-        };
-        
-        ws.onerror = (error) => {
-          console.error('WebSocket错误:', error);
-          document.getElementById('serverStatus').textContent = '❌ 服务器连接错误';
-          document.getElementById('serverStatus').style.color = '#ef4444';
-          
-          // 如果是移动设备且连接失败，提示用户
-          if (/Mobi|Android|iPhone|iPad|iPod/.test(navigator.userAgent)) {
-            const retry = confirm('无法连接到游戏服务器。\n是否要手动输入服务器地址？\n\n当前尝试的地址：' + wsUrl);
-            if (retry) {
-              const customUrl = prompt('请输入服务器地址（例如：192.168.1.100:8765）：', wsUrl.replace('ws://', ''));
-              if (customUrl) {
-                connectToCustomServer(customUrl);
-              }
-            }
-          }
-        };
-        
+        } else {
+          throw new Error(result.error || '注册失败');
+        }
       } catch (error) {
-        console.error('WebSocket连接失败:', error);
-        document.getElementById('serverStatus').textContent = '❌ 服务器连接失败: ' + error.message;
+        console.error('连接服务器失败:', error);
+        isConnected = false;
+        updateConnectionStatus('disconnected', '连接失败');
+        document.getElementById('serverStatus').textContent = '❌ 服务器连接失败';
         document.getElementById('serverStatus').style.color = '#ef4444';
+        
+        // 3秒后重试
+        setTimeout(initConnection, 3000);
       }
     }
-    
-    // 连接到自定义服务器
-    function connectToCustomServer(serverAddress) {
-      const wsUrl = 'ws://' + serverAddress;
-      console.log('尝试连接到自定义服务器:', wsUrl);
+
+    // 更新连接状态显示
+    function updateConnectionStatus(status, text) {
+      const statusEl = document.getElementById('connectionStatus');
+      statusEl.className = `connection-status ${status}`;
+      statusEl.textContent = text;
+    }
+
+    // 轮询房间状态
+    async function pollRoomStatus() {
+      if (!roomId || roomId === 'local' || !isConnected) return;
       
       try {
-        // 关闭现有连接
-        if (ws) {
-          ws.close();
-          ws = null;
+        const result = await api.getRoomStatus(roomId);
+        if (result.success) {
+          handleRoomUpdate(result.data);
         }
-        
-        ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => {
-          console.log('连接到自定义服务器成功');
-          document.getElementById('serverStatus').textContent = '✅ 已连接到自定义服务器';
-          document.getElementById('serverStatus').style.color = '#22c55e';
-          
-          // 注册玩家
-          ws.send(JSON.stringify({
-            type: 'register',
-            player_id: playerId
-          }));
-          
-          // 开始心跳
-          startHeartbeat();
-          
-          // 如果有房间ID，重新加入
-          if (roomId && roomId !== 'local') {
-            ws.send(JSON.stringify({
-              type: 'join_room',
-              room_id: roomId
-            }));
-          }
-        };
-        
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            handleServerMessage(data);
-          } catch (error) {
-            console.error('解析服务器消息失败:', error);
-          }
-        };
-        
-        ws.onclose = () => {
-          console.log('自定义服务器连接关闭');
-          document.getElementById('serverStatus').textContent = '❌ 自定义服务器连接断开';
-          document.getElementById('serverStatus').style.color = '#ef4444';
-          
-          // 停止心跳
-          stopHeartbeat();
-          
-          // 自动重连
-          scheduleReconnect();
-        };
-        
-        ws.onerror = (error) => {
-          console.error('自定义服务器连接错误:', error);
-          document.getElementById('serverStatus').textContent = '❌ 自定义服务器连接错误';
-          document.getElementById('serverStatus').style.color = '#ef4444';
-          
-          alert('连接到自定义服务器失败，请检查地址是否正确');
-        };
-        
       } catch (error) {
-        console.error('连接自定义服务器失败:', error);
-        document.getElementById('serverStatus').textContent = '❌ 连接自定义服务器失败: ' + error.message;
-        document.getElementById('serverStatus').style.color = '#ef4444';
-        alert('连接自定义服务器失败: ' + error.message);
+        console.error('轮询房间状态失败:', error);
+        // 如果是网络错误，尝试重连
+        if (error.message.includes('Failed to fetch')) {
+          isConnected = false;
+          updateConnectionStatus('disconnected', '连接断开');
+          initConnection();
+        }
       }
     }
-    
-    // 处理服务器消息
-    function handleServerMessage(data) {
-      switch (data.type) {
-        case 'registered':
-          console.log('注册成功:', data.player_id);
-          break;
-          
-        case 'room_created':
-          roomId = data.room_id;
-          setRoomIdText(roomId);
-          const shareUrl = location.href.split('#')[0] + '#room=' + roomId;
-          alert(`房间已创建\n分享链接给对手：\n${shareUrl}`);
-          break;
-          
-        case 'join_result':
-          if (data.success) {
-            roomId = data.room_id;
-            setRoomIdText(roomId);
-            console.log('成功加入房间:', roomId);
-          } else {
-            alert('加入房间失败，请检查房间ID');
-          }
-          break;
-          
-        case 'start_result':
-          if (data.success) {
-            console.log('游戏开始成功');
-          } else {
-            alert('开始游戏失败，请确保有足够的玩家');
-          }
-          break;
-          
-        case 'restart_result':
-          if (data.success) {
-            console.log('游戏重置成功');
-            endModal.style.display = 'none';
-            problemText.textContent = '等待匹配中…';
-            startBtn.disabled = true;
-            startBtn.textContent = '等待其他用户上线';
-          }
-          break;
-          
-        case 'room_update':
-          handleRoomUpdate(data);
-          break;
+
+    // 开始轮询
+    function startPolling() {
+      stopPolling();
+      pollTimer = setInterval(pollRoomStatus, 2000); // 每2秒轮询一次
+    }
+
+    // 停止轮询
+    function stopPolling() {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
       }
     }
-    
+
+    // 心跳
+    async function startPing() {
+      stopPing();
+      pingTimer = setInterval(async () => {
+        if (isConnected) {
+          try {
+            await api.ping(playerId);
+          } catch (error) {
+            console.error('心跳失败:', error);
+            isConnected = false;
+            updateConnectionStatus('disconnected', '连接断开');
+            initConnection();
+          }
+        }
+      }, 10000); // 每10秒心跳一次
+    }
+
+    function stopPing() {
+      if (pingTimer) {
+        clearInterval(pingTimer);
+        pingTimer = null;
+      }
+    }
+
     // 处理房间更新
     function handleRoomUpdate(data) {
       const room = data.room;
@@ -546,7 +525,7 @@
         showResults(players);
       }
       
-      // 同步更新自己的用户名称（防止服务器端修改不同步）
+      // 同步更新自己的用户名称
       const currentPlayer = players.find(p => p.id === playerId);
       if (currentPlayer && currentPlayer.name !== playerName) {
         console.log(`用户名称已同步更新: ${playerName} -> ${currentPlayer.name}`);
@@ -558,22 +537,18 @@
       const onlineCount = players.filter(p => p.online).length;
       onlineCountEl.textContent = `${onlineCount}/2`;
       
-      // 找到对手（除了自己之外的在线玩家）
+      // 找到对手
       const onlinePlayers = players.filter(p => p.online && p.id !== playerId);
       if (onlinePlayers.length > 0) {
         const opponent = onlinePlayers[0];
         const previousOpponentName = opponentNameEl.textContent;
         
-        // 如果对手名称发生变化，显示通知（包括初始状态变化）
         if (previousOpponentName !== opponent.name) {
           console.log(`对手名称已更新: ${previousOpponentName} -> ${opponent.name}`);
           opponentNameEl.textContent = opponent.name;
           opponentNameEl.style.color = '#60a5fa';
           
-          // 如果不是从"等待加入..."状态变化，添加视觉通知
           if (previousOpponentName !== '等待加入...') {
-            console.log(`对手名称修改通知: ${previousOpponentName} -> ${opponent.name}`);
-            // 可以在这里添加视觉通知，比如对手名称闪烁一下
             opponentNameEl.style.animation = 'pulse 1s';
             setTimeout(() => {
               opponentNameEl.style.animation = '';
@@ -587,13 +562,6 @@
       
       // 更新玩家列表
       renderPlayers(players);
-      console.log('房间状态更新:', {
-        roomState: room.state,
-        onlineCount,
-        singlePlayerMode,
-        running,
-        players: players.map(p => ({ name: p.name, online: p.online }))
-      });
       
       if (!singlePlayerMode) {
         if (onlineCount >= 2) {
@@ -609,48 +577,16 @@
         }
       }
     }
-    
-    // 发送消息到服务器
-    function sendToServer(message) {
-      console.log('发送消息到服务器:', message);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        console.log('WebSocket连接正常，发送消息');
-        ws.send(JSON.stringify(message));
-      } else {
-        console.warn('WebSocket未连接，无法发送消息:', message);
-        console.warn('WebSocket状态:', ws ? ws.readyState : 'null');
-      }
-    }
-    
-    // 心跳
-    function startHeartbeat() {
-      stopHeartbeat();
-      heartbeatTimer = setInterval(() => {
-        sendToServer({ type: 'heartbeat' });
-      }, 4000);
-    }
-    
-    function stopHeartbeat() {
-      if (heartbeatTimer) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = null;
-      }
-    }
-    
-    // 自动重连
-    function scheduleReconnect() {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-      }
+
+    // 连接到自定义服务器
+    function connectToCustomServer(serverAddress) {
+      const newUrl = 'http://' + serverAddress;
+      console.log('尝试连接到自定义服务器:', newUrl);
       
-      reconnectTimer = setTimeout(() => {
-        console.log('尝试重新连接服务器...');
-        connectWebSocket();
-      }, 3000);
+      serverUrl = newUrl;
+      updateConnectionStatus('connecting', '连接中...');
+      initConnection();
     }
-    
-    // 初始化连接
-    connectWebSocket();
 
     // UI refs
     const roomIdEl = document.getElementById('roomId');
@@ -724,8 +660,6 @@
     let roomId = null;
     let playerId = uuid(6);
     let playerName = 'P' + playerId;
-    let roomRef = null;
-    let unsubscribeRoom = null;
     let currentProblemIndex = 0;
     let problems = [];
     let myCorrect = 0, myWrong = 0, myAttempted = 0;
@@ -733,8 +667,6 @@
     let startTs = null;
     let localTimer = null;
     let singlePlayerMode = false;
-
-    // WebSocket服务器不需要数据库引用
 
     // UI helpers
     function setRoomIdText(id){ roomIdEl.textContent = id; }
@@ -744,28 +676,55 @@
     }
 
     // create room
-    createRoomBtn.addEventListener('click', ()=>{
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+    createRoomBtn.addEventListener('click', async ()=>{
+      if (!isConnected) {
         alert('服务器连接不可用，请检查服务器是否运行');
         return;
       }
-      sendToServer({ type: 'create_room' });
+      
+      try {
+        const result = await api.createRoom(playerId);
+        if (result.success) {
+          roomId = result.room_id;
+          setRoomIdText(roomId);
+          const shareUrl = location.href.split('#')[0] + '#room=' + roomId;
+          alert(`房间已创建\n分享链接给对手：\n${shareUrl}`);
+          startPolling();
+        } else {
+          alert('创建房间失败: ' + (result.error || '未知错误'));
+        }
+      } catch (error) {
+        console.error('创建房间失败:', error);
+        alert('创建房间失败: ' + error.message);
+      }
     });
 
-    // join room (via prompt or URL)
-    joinRoomBtn.addEventListener('click', ()=>{
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+    // join room
+    joinRoomBtn.addEventListener('click', async ()=>{
+      if (!isConnected) {
         alert('服务器连接不可用，请检查服务器是否运行');
         return;
       }
+      
       const id = prompt('输入房间 ID 或粘贴链接：'); 
       if(!id) return;
       const match = id.match(/room=(\d+)/i);
       const roomIdToJoin = match? match[1] : id.trim();
-      sendToServer({ 
-        type: 'join_room',
-        room_id: roomIdToJoin
-      });
+      
+      try {
+        const result = await api.joinRoom(playerId, roomIdToJoin);
+        if (result.success) {
+          roomId = roomIdToJoin;
+          setRoomIdText(roomId);
+          console.log('成功加入房间:', roomId);
+          startPolling();
+        } else {
+          alert('加入房间失败: ' + (result.error || '房间不存在'));
+        }
+      } catch (error) {
+        console.error('加入房间失败:', error);
+        alert('加入房间失败: ' + error.message);
+      }
     });
 
     // auto-join if URL contains room
@@ -798,22 +757,27 @@
       });
     }
 
-    // WebSocket不需要房间监听函数，由handleRoomUpdate处理
-
-    // start game (any player can request start if >=2 online)
-    startBtn.addEventListener('click', ()=>{
+    // start game
+    startBtn.addEventListener('click', async ()=>{
       console.log('开始游戏按钮被点击');
       if (singlePlayerMode) {
-        // 单人练习模式不需要服务器
         startLocalSinglePlayer();
         return;
       }
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+      if (!isConnected) {
         alert('服务器连接不可用，请检查服务器是否运行');
         return;
       }
-      console.log('发送开始游戏请求到服务器');
-      sendToServer({ type: 'start_game' });
+      
+      try {
+        const result = await api.startGame(playerId);
+        if (!result.success) {
+          alert('开始游戏失败: ' + (result.error || '请确保有足够的玩家'));
+        }
+      } catch (error) {
+        console.error('开始游戏失败:', error);
+        alert('开始游戏失败: ' + error.message);
+      }
     });
 
     // generate problems list
@@ -823,7 +787,6 @@
     // begin local run after room indicates running
     async function beginLocalRun(){
       console.log('开始本地游戏运行');
-      // 题目已经在handleRoomUpdate中更新了
       if(problems.length === 0) {
         problems = generateProblems(problemCount);
       }
@@ -833,7 +796,7 @@
       myAttempted = 0; 
       updateMyStats(); 
       running = true;
-      startTs = startTs || Date.now(); // 使用从服务器获取的时间戳
+      startTs = startTs || Date.now();
       console.log('游戏开始，题目数量:', problems.length);
       enableAnswerInputs(true); 
       answerInput.focus();
@@ -855,7 +818,6 @@
     function showProblem(){ if(currentProblemIndex >= problems.length) currentProblemIndex = 0; const p = problems[currentProblemIndex]; problemText.textContent = `${p.a} ${p.op} ${p.b} = ?`; qIndexEl.textContent = currentProblemIndex+1; }
 
     function enableAnswerInputs(flag){ 
-      // 在单人练习模式下，只有单人练习的函数才能控制输入框
       if (singlePlayerMode && !flag) {
         console.log('Ignoring enableAnswerInputs(false) in single player mode');
         return;
@@ -886,13 +848,12 @@
       else { myWrong++; playBuzzer(); }
       
       // 发送统计数据到服务器
-      if (!singlePlayerMode && ws && ws.readyState === WebSocket.OPEN) {
-        sendToServer({
-          type: 'update_stats',
-          correct: myCorrect,
-          wrong: myWrong,
-          attempted: myAttempted
-        });
+      if (!singlePlayerMode && isConnected) {
+        try {
+          await api.updateStats(playerId, myCorrect, myWrong, myAttempted);
+        } catch (error) {
+          console.error('更新统计失败:', error);
+        }
       }
       
       updateMyStats(); currentProblemIndex++; showProblem(); answerInput.value=''; answerInput.focus();
@@ -900,22 +861,21 @@
 
     function updateMyStats(){ myCorrectEl.textContent = myCorrect; myWrongEl.textContent = myWrong; myAttemptedEl.textContent = myAttempted; const acc = myAttempted? Math.round((myCorrect/myAttempted)*100) : 0; myAccEl.textContent = acc + '%'; }
 
-    // finish run: set room state finished and display results
+    // finish run
     async function finishRun(){
       running = false; enableAnswerInputs(false);
       
       // 发送最终统计数据到服务器
-      if (!singlePlayerMode && ws && ws.readyState === WebSocket.OPEN) {
-        sendToServer({
-          type: 'update_stats',
-          correct: myCorrect,
-          wrong: myWrong,
-          attempted: myAttempted
-        });
+      if (!singlePlayerMode && isConnected) {
+        try {
+          await api.updateStats(playerId, myCorrect, myWrong, myAttempted);
+        } catch (error) {
+          console.error('更新最终统计失败:', error);
+        }
       }
     }
 
-    // show results by reading players (从handleRoomUpdate获取数据)
+    // show results
     function showResults(players = null){
       if (players) {
         resultsBox.innerHTML = '';
@@ -928,12 +888,21 @@
       usedTime.textContent = DURATION + 's'; endModal.style.display = 'flex';
     }
 
-    restartBtn.addEventListener('click', ()=>{
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+    restartBtn.addEventListener('click', async ()=>{
+      if (!isConnected) {
         alert('服务器连接不可用，请检查服务器是否运行');
         return;
       }
-      sendToServer({ type: 'restart_game' });
+      
+      try {
+        const result = await api.restartGame(playerId);
+        if (!result.success) {
+          alert('重新开始失败: ' + (result.error || '未知错误'));
+        }
+      } catch (error) {
+        console.error('重新开始失败:', error);
+        alert('重新开始失败: ' + error.message);
+      }
     });
     closeModal.addEventListener('click', ()=>{ endModal.style.display = 'none'; });
 
@@ -966,12 +935,11 @@
 
     function beginSinglePlayerGame() {
       console.log('beginSinglePlayerGame called');
-      running = false; // 还没开始运行
+      running = false;
       startTs = Date.now();
       problemText.textContent = '点击开始单人练习';
       startBtn.textContent = '开始练习';
       startBtn.disabled = false;
-      // 不需要重新设置onclick，因为已经在startBtn的事件监听器中处理
     }
 
     function startLocalSinglePlayer() {
@@ -1046,7 +1014,7 @@
       }
     });
 
-    function savePlayerName() {
+    async function savePlayerName() {
       const newName = newNameInput.value.trim();
       if (!newName) {
         alert('用户名称不能为空');
@@ -1065,12 +1033,17 @@
       console.log(`用户名称已修改: ${oldName} -> ${newName}`);
       
       // 发送到服务器
-      if (!singlePlayerMode && ws && ws.readyState === WebSocket.OPEN) {
-        console.log('发送名称更新到服务器...');
-        sendToServer({
-          type: 'update_player_name',
-          name: playerName
-        });
+      if (!singlePlayerMode && isConnected) {
+        try {
+          const result = await api.updateName(playerId, playerName);
+          if (!result.success) {
+            console.error('名称更新失败:', result.error);
+            alert('名称更新失败: ' + (result.error || '未知错误'));
+          }
+        } catch (error) {
+          console.error('名称更新失败:', error);
+          alert('名称更新失败: ' + error.message);
+        }
       } else {
         console.log('单人练习模式或服务器连接断开，仅本地更新名称');
       }
@@ -1085,14 +1058,14 @@
 
     // 设置服务器按钮事件
     setServerBtn.addEventListener('click', () => {
-      const currentServer = getWebSocketUrl().replace('ws://', '');
-      const message = `请输入游戏服务器地址（格式：IP地址:端口，例如：192.168.1.100:8765）：
+      const currentServer = serverUrl.replace('http://', '');
+      const message = `请输入游戏服务器地址（格式：IP地址:端口，例如：192.168.1.100:8000）：
       
 当前连接地址：${currentServer}
 
 常见地址：
-• 本地：localhost:8765
-• 本机IP：${window.location.hostname}:8765
+• 本地：localhost:8000
+• 本机IP：${window.location.hostname}:8000
 • 如果在同一WiFi网络，请使用服务器的IP地址`;
       
       const newServer = prompt(message, currentServer);
@@ -1101,20 +1074,14 @@
       }
     });
 
-    // 服务器连接状态显示
-    function updateServerStatus() {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        document.getElementById('serverStatus').textContent = '✅ 服务器连接正常';
-        document.getElementById('serverStatus').style.color = '#22c55e';
-      } else {
-        document.getElementById('serverStatus').textContent = '❌ 服务器连接断开';
-        document.getElementById('serverStatus').style.color = '#ef4444';
-      }
-    }
-
-    // initial UI state
-    setPlayerIdText(); setRoomIdText('-'); timeText.textContent = DURATION + 's'; timerBar.style.width = '100%';
-    updateServerStatus();
+    // 初始化
+    setPlayerIdText(); 
+    setRoomIdText('-'); 
+    timeText.textContent = DURATION + 's'; 
+    timerBar.style.width = '100%';
+    
+    // 启动连接
+    initConnection();
 
   </script>
 </body>

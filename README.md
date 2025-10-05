@@ -1,6 +1,6 @@
 # 心算对战游戏
 
-一个基于WebSocket的双人心算对战游戏，使用Python开发。
+一个基于HTTP和WebSocket的双人心算对战游戏，使用Python开发。
 
 ## 功能特性
 
@@ -43,17 +43,17 @@ uv sync
 
 #### 默认配置启动（推荐）
 ```bash
-uv run run_server.py
+uv run http_server.py
 ```
 
 #### 自定义配置启动
 ```bash
-uv run run_server.py --host 0.0.0.0 --http-port 8000 --ws-port 8765
+uv run http_server.py --host 0.0.0.0 --http-port 8000 --ws-port 8765
 ```
 
 #### 仅本地访问
 ```bash
-uv run run_server.py --local-only
+uv run http_server.py --local-only
 ```
 
 ### 4. 访问游戏
@@ -78,13 +78,11 @@ uv run run_server.py --local-only
 ```
 match-cal/
 ├── pyproject.toml          # 项目配置和依赖
-├── run_server.py           # 服务器启动脚本
-├── combined_server.py      # 合并的HTTP和WebSocket服务器
-├── test_network_config.py  # 网络配置测试工具
-├── index.html             # 游戏主页面
-├── ring.flac              # 音效文件
-├── requirements.txt       # 旧版依赖文件（已弃用）
-└── CLAUDE.md              # 项目开发说明
+├── http_server.py          # HTTP和WebSocket服务器
+├── index.html              # 游戏主页面
+├── ring.flac               # 音效文件
+├── README_HTTP.md          # HTTP服务器详细说明
+└── CLAUDE.md               # 项目开发说明
 ```
 
 ## 游戏规则
@@ -94,18 +92,6 @@ match-cal/
 3. 题目包括加减乘除运算
 4. 正确答案加分，错误答案不扣分
 5. 时间结束后显示最终得分和胜者
-
-## 开发命令
-
-### 测试网络配置
-```bash
-uv run test_network_config.py
-```
-
-### 直接运行合并服务器
-```bash
-uv run combined_server.py --host 0.0.0.0 --port 8000
-```
 
 ## 故障排除
 
