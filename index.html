@@ -403,12 +403,28 @@
       return Math.floor(Math.random() * (max - min + 1)) + min; 
     }
     
-    function generateProblems(n){ 
+    function generateProblems(n, seed = null){ 
+      // 如果是对战模式且提供了seed，使用seed来生成相同的题目
+      let random;
+      if (seed) {
+        // 简单的伪随机数生成器，基于seed
+        let seedNum = 0;
+        for (let i = 0; i < seed.length; i++) {
+          seedNum += seed.charCodeAt(i) * (i + 1);
+        }
+        random = () => {
+          seedNum = (seedNum * 9301 + 49297) % 233280;
+          return seedNum / 233280;
+        };
+      } else {
+        random = Math.random;
+      }
+      
       const arr = []; 
       for(let i = 0; i < n; i++){ 
-        const op = Math.random() < 0.5 ? '+' : '-'; 
-        let a = randInt(10, 99); 
-        let b = randInt(10, 99); 
+        const op = random() < 0.5 ? '+' : '-'; 
+        let a = Math.floor(random() * 90) + 10; 
+        let b = Math.floor(random() * 90) + 10; 
         if(op === '-' && a < b) [a, b] = [b, a]; 
         arr.push({ 
           a, b, op, 
@@ -442,13 +458,26 @@
     }
 
     function startGame() {
-      gameState.problems = generateProblems(PROBLEM_COUNT);
+      // 如果是对战模式，使用房间ID作为种子生成相同的题目
+      if (gameState.mode === 'battle' && gameState.roomId) {
+        gameState.problems = generateProblems(PROBLEM_COUNT, gameState.roomId);
+      } else {
+        gameState.problems = generateProblems(PROBLEM_COUNT);
+      }
+      
       gameState.currentProblemIndex = 0;
       gameState.myCorrect = 0;
       gameState.myWrong = 0;
       gameState.myAttempted = 0;
       gameState.running = true;
       gameState.startTs = Date.now();
+      
+      // 如果是对战模式，更新房间状态
+      if (gameState.mode === 'battle' && gameState.roomId && rooms[gameState.roomId]) {
+        rooms[gameState.roomId].status = 'playing';
+        rooms[gameState.roomId].startTime = Date.now();
+        saveRooms();
+      }
       
       updateStats();
       showProblem();
@@ -688,6 +717,13 @@
           startBtn.style.display = 'block';
           startBtn.textContent = '开始游戏';
           answerRow.style.display = 'none';
+          
+          // 添加一个提示，让用户知道可以同步开始
+          setTimeout(() => {
+            if (!gameState.running && rooms[roomId] && rooms[roomId].status === 'waiting') {
+              problemText.textContent = '已加入房间，可以开始游戏了！（房主开始后会自动同步）';
+            }
+          }, 1000);
         }
       } else {
         alert('房间不存在或已过期');
@@ -762,7 +798,7 @@
     timerBar.style.width = '100%';
     updateStats();
     
-    // 定期刷新房间数据（每5秒）
+    // 定期刷新房间数据（每2秒）
     setInterval(() => {
       if (gameState.mode === 'battle' && gameState.roomId) {
         loadRooms();
@@ -783,6 +819,16 @@
           } else if (room.guest === gameState.playerName) {
             gameState.opponentName = room.host;
             opponentNameEl.textContent = gameState.opponentName;
+            
+            // 如果房主已经开始游戏，而自己还没开始，则自动开始
+            if (room.status === 'playing' && !gameState.running) {
+              startGame();
+            }
+          }
+          
+          // 如果游戏已经开始，检查是否需要同步开始
+          if (room.status === 'playing' && !gameState.running) {
+            startGame();
           }
         } else {
           // 房间不存在了
@@ -790,7 +836,7 @@
           startBtn.style.display = 'none';
         }
       }
-    }, 5000);
+    }, 2000);
   </script>
 </body>
 </html>
