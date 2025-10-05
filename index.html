@@ -660,6 +660,13 @@
       // 重新加载房间数据以确保是最新的
       loadRooms();
       
+      console.log('尝试加入房间:', {
+        roomId,
+        playerName: gameState.playerName,
+        roomExists: !!rooms[roomId],
+        roomData: rooms[roomId]
+      });
+      
       if(rooms[roomId]) {
         // 检查房间是否已满
         if (rooms[roomId].guest && rooms[roomId].guest !== gameState.playerName) {
@@ -669,6 +676,7 @@
         
         // 检查是否是房主重新加入
         if (rooms[roomId].host === gameState.playerName) {
+          console.log('房主重新加入房间');
           gameState.roomId = roomId;
           gameState.mode = 'battle';
           gameModeEl.textContent = '好友对战';
@@ -687,6 +695,7 @@
           }
           answerRow.style.display = 'none';
         } else {
+          console.log('作为客人加入房间');
           // 作为客人加入房间
           gameState.roomId = roomId;
           gameState.mode = 'battle';
@@ -700,7 +709,7 @@
           opponentNameEl.textContent = gameState.opponentName;
           saveRooms();
           
-          console.log('客人加入房间:', {
+          console.log('客人加入房间（保存后）:', {
             roomId,
             host: rooms[roomId].host,
             guest: rooms[roomId].guest,
@@ -721,6 +730,7 @@
           }, 1000);
         }
       } else {
+        console.log('房间不存在:', roomId);
         alert('房间不存在或已过期');
       }
     });
